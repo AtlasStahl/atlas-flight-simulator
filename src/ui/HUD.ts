@@ -1,28 +1,27 @@
-/** Cockpit-style HUD with Canvas-rendered round instruments */
+/** Cockpit-style HUD with Canvas-rendered round instruments + MENU button */
 export class HUD {
   private _canvas: HTMLCanvasElement;
   private _ctx: CanvasRenderingContext2D;
   private _overlay: HTMLDivElement;
+  private _menuBtn: HTMLButtonElement;
   private _visible: boolean = true;
 
   // Instrument positions (relative to canvas)
   private _airspeedPos = { x: 0, y: 0 };
   private _attitudePos = { x: 0, y: 0 };
   private _altimeterPos = { x: 0, y: 0 };
-  private _headingPos = { x: 0, y: 0 };
-  private _vsiPos = { x: 0, y: 0 };
-  private _throttlePos = { x: 0, y: 0 };
 
-  // Instrument radii
-  private readonly R_AIRSPEED = 75;
-  private readonly R_ATTITUDE = 90;
-  private readonly R_ALTITUDE = 75;
-  private readonly R_HEADING = 60;
-  private readonly R_VSI = 60;
-  private readonly R_THROTTLE = 50;
+  // Compact instrument radii (smaller to fit in a single row)
+  private readonly R_AIRSPEED = 55;
+  private readonly R_ATTITUDE = 65;
+  private readonly R_ALTITUDE = 55;
 
-  constructor() {
-    // Semi-transparent dark overlay
+  private _onMenuCallback: () => void;
+
+  constructor(onMenu: () => void) {
+    this._onMenuCallback = onMenu;
+
+    // Overlay container (no background tint - cleaner look)
     this._overlay = document.createElement('div');
     this._overlay.style.cssText = `
       position: fixed;
@@ -32,10 +31,9 @@ export class HUD {
       height: 100%;
       pointer-events: none;
       z-index: 100;
-      background: rgba(0, 0, 0, 0.15);
     `;
 
-    // Single large canvas for all instruments
+    // Canvas for instruments
     this._canvas = document.createElement('canvas');
     this._canvas.style.cssText = `
       position: absolute;
@@ -43,14 +41,49 @@ export class HUD {
       left: 0;
       width: 100%;
       height: 100%;
+      pointer-events: none;
     `;
     this._overlay.appendChild(this._canvas);
+
+    // MENU button (top-right corner)
+    this._menuBtn = document.createElement('button');
+    this._menuBtn.textContent = '☰ MENU';
+    this._menuBtn.style.cssText = `
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      z-index: 200;
+      pointer-events: auto;
+      padding: 10px 24px;
+      font-size: 14px;
+      font-weight: bold;
+      font-family: 'Segoe UI', Tahoma, sans-serif;
+      letter-spacing: 1px;
+      background: rgba(10, 10, 30, 0.75);
+      color: #ffffff;
+      border: 1px solid rgba(255,255,255,0.25);
+      border-radius: 8px;
+      cursor: pointer;
+      backdrop-filter: blur(8px);
+      transition: all 0.2s ease;
+    `;
+    this._menuBtn.addEventListener('mouseenter', () => {
+      this._menuBtn.style.background = 'rgba(0, 150, 255, 0.6)';
+      this._menuBtn.style.borderColor = 'rgba(100, 200, 255, 0.8)';
+    });
+    this._menuBtn.addEventListener('mouseleave', () => {
+      this._menuBtn.style.background = 'rgba(10, 10, 30, 0.75)';
+      this._menuBtn.style.borderColor = 'rgba(255,255,255,0.25)';
+    });
+    this._menuBtn.addEventListener('click', () => {
+      this._onMenuCallback();
+    });
+    this._overlay.appendChild(this._menuBtn);
 
     this._ctx = this._canvas.getContext('2d')!;
 
     document.body.appendChild(this._overlay);
 
-    // Handle resize
     window.addEventListener('resize', () => this.onResize());
     this.onResize();
   }
@@ -61,40 +94,26 @@ export class HUD {
     this._canvas.height = window.innerHeight * dpr;
     this._ctx.scale(dpr, dpr);
 
-    // Calculate instrument positions based on screen size
     const w = window.innerWidth;
     const h = window.innerHeight;
 
-    // Instruments at BOTTOM of screen, not blocking the view
-    const panelY = h - 140; // Bottom panel, 140px from bottom
+    // Single compact row at the bottom of the screen
+    // Panel sits at bottom with enough margin to avoid clipping
+    const panelH = Math.max(this.R_ATTITUDE * 2 + 30, 160);
+    const panelY = h - panelH / 2 - 10;
 
-    // Layout:
-    // [Airspeed]  [Attitude]  [Altimeter]
-    //              [Heading]
+    // 3 instruments evenly spaced in a horizontal row
+    const spacing = Math.min(w * 0.22, 280);
+    const centerX = w / 2;
 
-    const maxW = Math.min(w * 0.9, 1000);
-    const startX = (w - maxW) / 2;
-
-    // Main row at bottom
-    this._airspeedPos.x = startX + this.R_AIRSPEED;
-    this._airspeedPos.y = panelY;
-
-    this._attitudePos.x = startX + maxW * 0.5;
+    this._attitudePos.x = centerX;
     this._attitudePos.y = panelY;
 
-    this._altimeterPos.x = startX + maxW;
+    this._airspeedPos.x = centerX - spacing;
+    this._airspeedPos.y = panelY;
+
+    this._altimeterPos.x = centerX + spacing;
     this._altimeterPos.y = panelY;
-
-    // Heading below attitude (smaller)
-    this._headingPos.x = this._attitudePos.x;
-    this._headingPos.y = panelY + this.R_ATTITUDE + 40;
-
-    // VSI and Throttle below the main row
-    this._vsiPos.x = startX + this.R_VSI + 40;
-    this._vsiPos.y = panelY + this.R_AIRSPEED + 40;
-
-    this._throttlePos.x = startX + maxW - this.R_THROTTLE - 40;
-    this._throttlePos.y = this._vsiPos.y;
   }
 
   update(
@@ -117,23 +136,21 @@ export class HUD {
     // Clear canvas
     this._ctx.clearRect(0, 0, w, h);
 
-    // Draw all instruments
+    // Draw main instruments
     this.drawAirspeed(speed * 3.6); // m/s to km/h
     this.drawAltimeter(Math.max(0, altitude));
-    this.drawVSI(verticalSpeed);
     this.drawAttitude(pitch, roll);
-    this.drawHeading(heading);
-    this.drawThrottle(throttle);
 
-    // Draw status text at top
+    // Draw info panels (top-left: status + mission, top-right: heading/throttle/vsi)
     this.drawStatus(onGround, crashed);
+    this.drawInfoPanel(heading, throttle, verticalSpeed);
 
     // Draw mission status if provided
     if (missionStatus) {
       this.drawMissionStatus(missionStatus);
     }
 
-    // Draw controls reference at bottom
+    // Draw controls reference (minimal, bottom center)
     this.drawControlsReference();
   }
 
@@ -360,69 +377,7 @@ export class HUD {
     ctx.fillText(Math.round(clampedAlt).toString(), x, y + r - 23);
   }
 
-  private drawVSI(verticalSpeed: number) {
-    const { x, y } = this._vsiPos;
-    const r = this.R_VSI;
-
-    this.drawGaugeBackground(x, y, r);
-
-    const ctx = this._ctx;
-    const maxVS = 10; // -10 to +10 m/s
-
-    // Scale: -10 to +10, arc from 135° to 405° (270° sweep)
-    const startAngle = Math.PI * 0.75;
-    const sweepAngle = Math.PI * 1.5;
-
-    // Tick marks
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '9px Arial, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    for (let v = -10; v <= 10; v += 2) {
-      const angle = startAngle + ((v + maxVS) / (maxVS * 2)) * sweepAngle;
-      const outerR = r - 6;
-      const innerR = r - 14;
-
-      ctx.beginPath();
-      ctx.moveTo(x + Math.cos(angle) * outerR, y + Math.sin(angle) * outerR);
-      ctx.lineTo(x + Math.cos(angle) * innerR, y + Math.sin(angle) * innerR);
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-
-      // Number
-      const textR = r - 22;
-      ctx.fillText(v.toString(), x + Math.cos(angle) * textR, y + Math.sin(angle) * textR);
-    }
-
-    // Green zone around center (±2 m/s)
-    const greenStart = startAngle + ((-2 + maxVS) / (maxVS * 2)) * sweepAngle;
-    const greenEnd = startAngle + ((2 + maxVS) / (maxVS * 2)) * sweepAngle;
-    this.drawArcSegment(x, y, r - 3, greenStart, greenEnd, '#00cc00', 3);
-
-    // Needle
-    const clampedVS = Math.max(-maxVS, Math.min(maxVS, verticalSpeed));
-    const needleAngle = startAngle + ((clampedVS + maxVS) / (maxVS * 2)) * sweepAngle;
-    this.drawNeedle(x, y, needleAngle, r - 15, 2);
-
-    // Label
-    ctx.fillStyle = '#cccccc';
-    ctx.font = 'bold 10px Arial, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('VSI', x, y - r + 38);
-
-    // Digital readout
-    ctx.fillStyle = '#111111';
-    ctx.fillRect(x - 22, y + r - 30, 44, 16);
-    ctx.strokeStyle = '#555555';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(x - 22, y + r - 30, 44, 16);
-    ctx.fillStyle = '#00ff00';
-    ctx.font = '11px Courier New, monospace';
-    ctx.fillText(verticalSpeed.toFixed(1), x, y + r - 19);
-  }
-
+  // --- Attitude indicator (center instrument) ---
   private drawAttitude(pitch: number, roll: number) {
     const { x, y } = this._attitudePos;
     const r = this.R_ATTITUDE;
@@ -547,182 +502,142 @@ export class HUD {
     ctx.restore();
   }
 
-  private drawHeading(heading: number) {
-    const { x, y } = this._headingPos;
-    const r = this.R_HEADING;
-
-    this.drawGaugeBackground(x, y, r);
-
-    const ctx = this._ctx;
-
-    // Convert heading to degrees (0-360)
-    const headingDeg = (((heading * 180 / Math.PI) % 360) + 360) % 360;
-
-    // Compass rose - draw cardinal directions
-    ctx.fillStyle = '#cccccc';
-    ctx.font = 'bold 10px Arial, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    const directions = [
-      { angle: 0, label: 'N' },
-      { angle: 90, label: 'E' },
-      { angle: 180, label: 'S' },
-      { angle: 270, label: 'W' }
-    ];
-
-    // Draw compass marks around the edge
-    const startAngle = -Math.PI / 2; // Start from top (North)
-    for (let deg = 0; deg < 360; deg += 10) {
-      const angle = startAngle + (deg * Math.PI / 180);
-      const isCardinal = deg % 90 === 0;
-      const isMajor = deg % 30 === 0;
-
-      const outerR = r - 6;
-      const innerR = isCardinal ? r - 18 : isMajor ? r - 14 : r - 10;
-
-      ctx.beginPath();
-      ctx.moveTo(x + Math.cos(angle) * outerR, y + Math.sin(angle) * outerR);
-      ctx.lineTo(x + Math.cos(angle) * innerR, y + Math.sin(angle) * innerR);
-      ctx.strokeStyle = isCardinal ? '#ffffff' : '#aaaaaa';
-      ctx.lineWidth = isCardinal ? 2 : 1;
-      ctx.stroke();
-    }
-
-    // Cardinal direction labels
-    for (const dir of directions) {
-      const angle = startAngle + (dir.angle * Math.PI / 180);
-      const textR = r - 26;
-      const color = dir.angle === 0 ? '#ff4444' : '#cccccc'; // North in red
-      ctx.fillStyle = color;
-      ctx.font = dir.angle === 0 ? 'bold 12px Arial, sans-serif' : '10px Arial, sans-serif';
-      ctx.fillText(dir.label, x + Math.cos(angle) * textR, y + Math.sin(angle) * textR);
-    }
-
-    // Heading needle (points to current heading, rotated opposite to show direction)
-    const needleAngle = startAngle + headingDeg * Math.PI / 180;
-    this.drawNeedle(x, y, needleAngle, r - 16, 2);
-
-    // Label
-    ctx.fillStyle = '#cccccc';
-    ctx.font = 'bold 10px Arial, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('HDG', x, y - r + 35);
-
-    // Digital readout
-    ctx.fillStyle = '#111111';
-    ctx.fillRect(x - 22, y + r - 30, 44, 16);
-    ctx.strokeStyle = '#555555';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(x - 22, y + r - 30, 44, 16);
-    ctx.fillStyle = '#00ff00';
-    ctx.font = '11px Courier New, monospace';
-    ctx.fillText(Math.round(headingDeg).toString(), x, y + r - 19);
-  }
-
-  private drawThrottle(throttle: number) {
-    const { x, y } = this._throttlePos;
-    const r = this.R_THROTTLE;
-
-    this.drawGaugeBackground(x, y, r);
-
-    const ctx = this._ctx;
-
-    // Scale: 0-100%, arc from 135° to 405° (270° sweep)
-    const startAngle = Math.PI * 0.75;
-    const sweepAngle = Math.PI * 1.5;
-
-    // Tick marks
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '9px Arial, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    for (let t = 0; t <= 100; t += 10) {
-      const angle = startAngle + (t / 100) * sweepAngle;
-      const outerR = r - 5;
-      const innerR = r - 12;
-
-      ctx.beginPath();
-      ctx.moveTo(x + Math.cos(angle) * outerR, y + Math.sin(angle) * outerR);
-      ctx.lineTo(x + Math.cos(angle) * innerR, y + Math.sin(angle) * innerR);
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-
-      // Number
-      const textR = r - 20;
-      ctx.fillText(t.toString(), x + Math.cos(angle) * textR, y + Math.sin(angle) * textR);
-    }
-
-    // Green fill arc (0 to current throttle)
-    const clampedThrottle = Math.max(0, Math.min(100, throttle * 100));
-    if (clampedThrottle > 0) {
-      const fillEnd = startAngle + (clampedThrottle / 100) * sweepAngle;
-      ctx.beginPath();
-      ctx.arc(x, y, r - 4, startAngle, fillEnd);
-      ctx.strokeStyle = '#00cc00';
-      ctx.lineWidth = 5;
-      ctx.stroke();
-    }
-
-    // Needle
-    const needleAngle = startAngle + (clampedThrottle / 100) * sweepAngle;
-    this.drawNeedle(x, y, needleAngle, r - 14, 2);
-
-    // Label
-    ctx.fillStyle = '#cccccc';
-    ctx.font = 'bold 10px Arial, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('THR', x, y - r + 32);
-
-    // Digital readout
-    ctx.fillStyle = '#111111';
-    ctx.fillRect(x - 20, y + r - 28, 40, 15);
-    ctx.strokeStyle = '#555555';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(x - 20, y + r - 28, 40, 15);
-    ctx.fillStyle = '#00ff00';
-    ctx.font = '10px Courier New, monospace';
-    ctx.fillText(Math.round(clampedThrottle) + '%', x, y + r - 17);
-  }
-
-  private drawStatus(onGround: boolean, crashed: boolean) {
+  // --- Info panel (top-right): heading, throttle, VSI ---
+  private drawInfoPanel(heading: number, throttle: number, verticalSpeed: number) {
     const ctx = this._ctx;
     const w = window.innerWidth;
+    const x = w - 200;
+    const y = 60;
+    const panelW = 170;
+    const panelH = 110;
 
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
+    // Panel background
+    ctx.fillStyle = 'rgba(10, 10, 30, 0.65)';
+    ctx.beginPath();
+    ctx.roundRect(x, y, panelW, panelH, 8);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(100, 200, 255, 0.3)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
 
-    // Status background
-    const textY = 15;
-    const padding = 15;
+    // Heading
+    const headingDeg = (((heading * 180 / Math.PI) % 360) + 360) % 360;
+    ctx.fillStyle = '#88aacc';
+    ctx.font = '11px Segoe UI, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('HDG', x + 12, y + 22);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 14px Segoe UI, sans-serif';
+    ctx.fillText(`${Math.round(headingDeg).toString().padStart(3, ' ')}°`, x + 60, y + 22);
+
+    // Throttle bar
+    ctx.fillStyle = '#88aacc';
+    ctx.font = '11px Segoe UI, sans-serif';
+    ctx.fillText('THR', x + 12, y + 48);
+
+    const barX = x + 60;
+    const barY = y + 38;
+    const barW = panelW - 80;
+    const barH = 12;
+    ctx.fillStyle = 'rgba(255,255,255,0.1)';
+    ctx.fillRect(barX, barY, barW, barH);
+    const thrW = throttle * barW;
+    const thrGrad = ctx.createLinearGradient(barX, 0, barX + barW, 0);
+    thrGrad.addColorStop(0, '#00cc44');
+    thrGrad.addColorStop(0.7, '#ffcc00');
+    thrGrad.addColorStop(1, '#ff4400');
+    ctx.fillStyle = thrGrad;
+    ctx.fillRect(barX, barY, thrW, barH);
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(barX, barY, barW, barH);
+
+    // Throttle %
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 11px Segoe UI, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(`${Math.round(throttle * 100)}%`, x + panelW - 12, y + 48);
+    ctx.textAlign = 'left';
+
+    // VSI
+    ctx.fillStyle = '#88aacc';
+    ctx.font = '11px Segoe UI, sans-serif';
+    ctx.fillText('V/S', x + 12, y + 78);
+    const vsiColor = verticalSpeed > 0.5 ? '#00cc44' : verticalSpeed < -0.5 ? '#ff6644' : '#ffffff';
+    ctx.fillStyle = vsiColor;
+    ctx.font = 'bold 14px Segoe UI, sans-serif';
+    const vsiSign = verticalSpeed >= 0 ? '+' : '';
+    ctx.fillText(`${vsiSign}${verticalSpeed.toFixed(1)} m/s`, x + 60, y + 78);
+
+    // Small arrow
+    ctx.fillStyle = vsiColor;
+    ctx.beginPath();
+    if (verticalSpeed > 0.5) {
+      // Up arrow
+      ctx.moveTo(x + panelW - 20, y + 68);
+      ctx.lineTo(x + panelW - 14, y + 78);
+      ctx.lineTo(x + panelW - 26, y + 78);
+    } else if (verticalSpeed < -0.5) {
+      // Down arrow
+      ctx.moveTo(x + panelW - 20, y + 82);
+      ctx.lineTo(x + panelW - 14, y + 72);
+      ctx.lineTo(x + panelW - 26, y + 72);
+    } else {
+      // Horizontal line
+      ctx.moveTo(x + panelW - 26, y + 75);
+      ctx.lineTo(x + panelW - 14, y + 75);
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      return;
+    }
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // --- Status (top-left): airborne/crashed + mission ---
+  private drawStatus(onGround: boolean, crashed: boolean) {
+    const ctx = this._ctx;
+    const x = 16;
+    const y = 60;
+
+    // Background panel
+    ctx.fillStyle = 'rgba(10, 10, 30, 0.65)';
+    ctx.beginPath();
+    ctx.roundRect(x, y, 140, 44, 8);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(100, 200, 255, 0.3)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
 
     let statusText: string;
     let textColor: string;
 
     if (crashed) {
-      statusText = 'CRASHED - Press Esc to reset';
+      statusText = 'CRASHED';
       textColor = '#ff4444';
     } else if (onGround) {
       statusText = 'ON GROUND';
       textColor = '#ffcc00';
     } else {
       statusText = 'AIRBORNE';
-      textColor = '#00cc00';
+      textColor = '#00cc44';
     }
 
-    ctx.font = 'bold 16px Arial, sans-serif';
-    const metrics = ctx.measureText(statusText);
-    const textW = metrics.width;
-
-    // Background panel
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-    ctx.fillRect((w - textW) / 2 - padding, textY - 5, textW + padding * 2, 28);
-
-    // Status text
+    // Dot indicator
+    ctx.beginPath();
+    ctx.arc(x + 16, y + 22, 5, 0, Math.PI * 2);
     ctx.fillStyle = textColor;
-    ctx.fillText(statusText, w / 2, textY);
+    ctx.fill();
+
+    ctx.fillStyle = textColor;
+    ctx.font = 'bold 13px Segoe UI, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(statusText, x + 28, y + 26);
+
+    // Sub-text
+    ctx.fillStyle = '#6688aa';
+    ctx.font = '10px Segoe UI, sans-serif';
+    ctx.fillText(crashed ? 'Press ESC to reset' : onGround ? 'Throttle up & pitch back' : 'Fly through rings!', x + 16, y + 40);
   }
 
   private drawControlsReference() {
@@ -730,40 +645,55 @@ export class HUD {
     const w = window.innerWidth;
     const h = window.innerHeight;
 
+    // Minimal controls hint - only visible when on ground or just started
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
+    const textY = h - 12;
 
-    const textY = h - 20;
-    const controls = 'Pitch: W/S  |  Roll: A/D  |  Yaw: Q/E  |  Throttle: Shift↑/Ctrl↓  |  Flaps: G  |  Brakes: B  |  Reset: Esc';
-
-    ctx.font = '12px Arial, sans-serif';
-    ctx.fillStyle = 'rgba(200, 200, 200, 0.5)';
-    ctx.fillText(controls, w / 2, textY);
+    ctx.font = '11px Segoe UI, sans-serif';
+    ctx.fillStyle = 'rgba(150, 180, 220, 0.35)';
+    ctx.fillText('W/S Pitch  •  A/D Roll  •  Q/E Yaw  •  ↑/↓ Throttle  •  G Flaps  •  B Brakes', w / 2, textY);
   }
 
   private drawMissionStatus(missionStatus: { totalRings: number; ringsPassed: number; score: number; timeElapsed: number; completed: boolean }) {
     const ctx = this._ctx;
-    const w = window.innerWidth;
+    const x = 16;
+    const y = 112;
+    const panelW = 140;
+    const panelH = missionStatus.completed ? 70 : 44;
 
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
+    // Background
+    ctx.fillStyle = 'rgba(10, 10, 30, 0.65)';
+    ctx.beginPath();
+    ctx.roundRect(x, y, panelW, panelH, 8);
+    ctx.fill();
+    ctx.strokeStyle = missionStatus.completed ? 'rgba(0, 200, 100, 0.5)' : 'rgba(100, 200, 255, 0.3)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
 
-    const textY = 50;
-    const padding = 12;
+    ctx.textAlign = 'left';
 
-    const statusText = `Rings: ${missionStatus.ringsPassed}/${missionStatus.totalRings}  |  Score: ${missionStatus.score}  |  Time: ${Math.floor(missionStatus.timeElapsed)}s`;
+    // Rings
+    ctx.fillStyle = '#88aacc';
+    ctx.font = '11px Segoe UI, sans-serif';
+    ctx.fillText('RINGS', x + 14, y + 18);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 13px Segoe UI, sans-serif';
+    ctx.fillText(`${missionStatus.ringsPassed} / ${missionStatus.totalRings}`, x + 70, y + 18);
 
-    ctx.font = '14px Arial, sans-serif';
-    const metrics = ctx.measureText(statusText);
-    const textW = metrics.width;
+    // Score + Time
+    ctx.fillStyle = '#88aacc';
+    ctx.font = '11px Segoe UI, sans-serif';
+    ctx.fillText('SCORE', x + 14, y + 36);
+    ctx.fillStyle = '#ffcc00';
+    ctx.font = 'bold 13px Segoe UI, sans-serif';
+    ctx.fillText(`${missionStatus.score}`, x + 70, y + 36);
 
-    // Background panel
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-    ctx.fillRect((w - textW) / 2 - padding, textY - 4, textW + padding * 2, 24);
-
-    // Mission text
-    ctx.fillStyle = '#88ccff';
-    ctx.fillText(statusText, w / 2, textY);
+    if (missionStatus.completed) {
+      ctx.fillStyle = '#00cc44';
+      ctx.font = 'bold 12px Segoe UI, sans-serif';
+      ctx.fillText(`✓ COMPLETE  ${Math.floor(missionStatus.timeElapsed)}s`, x + 14, y + 60);
+    }
   }
 
   hide() {

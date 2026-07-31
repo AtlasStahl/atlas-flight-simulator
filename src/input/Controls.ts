@@ -33,7 +33,7 @@ export class Controls {
   }
 
   update() {
-    // Pitch: W/S only (Arrow keys are for throttle)
+    // Pitch: W/S
     this.pitchUp = this.keys.has('KeyW');
     this.pitchDown = this.keys.has('KeyS');
 
@@ -45,9 +45,9 @@ export class Controls {
     this.yawLeft = this.keys.has('KeyQ');
     this.yawRight = this.keys.has('KeyE');
 
-    // Throttle: ArrowUp/ArrowDown (primary) or Shift/Ctrl or R/F
-    this.throttleUp = this.keys.has('ArrowUp') || this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') || this.keys.has('KeyR');
-    this.throttleDown = this.keys.has('ArrowDown') || this.keys.has('ControlLeft') || this.keys.has('ControlRight') || this.keys.has('KeyF');
+    // Throttle: ArrowUp/ArrowDown ONLY (no Shift/Ctrl to avoid browser conflicts)
+    this.throttleUp = this.keys.has('ArrowUp');
+    this.throttleDown = this.keys.has('ArrowDown');
 
     // Flaps: G
     this.flaps = this.keys.has('KeyG');

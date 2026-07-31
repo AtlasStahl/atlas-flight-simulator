@@ -47,7 +47,7 @@ const missionSystem = new MissionSystem(scene);
 // --- Game State ---
 let aircraft: Aircraft | null = null;
 const flightModel = new FlightModel();
-const groundCollision = new GroundCollision();
+const groundCollision = new GroundCollision(terrain.getHeight.bind(terrain));
 const chaseCamera = new ChaseCamera(camera);
 const controls = new Controls();
 let hud: HUD | null = null;
@@ -57,8 +57,19 @@ let selector: AircraftSelector | null = null;
 const runwayBounds = runway.bounds;
 
 // --- Start Position (on runway, facing positive X) ---
-const startPos = new THREE.Vector3(-1200, 0, 0);
+const startPos = new THREE.Vector3(-600, 0, 0);
 const startRot = new THREE.Euler(0, 0, 0, 'YXZ');
+
+function returnToMenu() {
+  // Hide HUD
+  if (hud) {
+    hud.hide();
+  }
+  // Show selector
+  if (selector) {
+    selector.show();
+  }
+}
 
 function startGame(config: AircraftConfig) {
   // Remove old aircraft if exists
@@ -74,10 +85,11 @@ function startGame(config: AircraftConfig) {
 
   // Reset systems
   groundCollision.reset();
+  missionSystem.reset(scene);
 
-  // Create HUD
+  // Create HUD with menu callback
   if (!hud) {
-    hud = new HUD();
+    hud = new HUD(returnToMenu);
   }
   hud.show();
 
@@ -90,7 +102,7 @@ function startGame(config: AircraftConfig) {
 // --- Show Aircraft Selector ---
 selector = new AircraftSelector(startGame);
 
-// --- Handle Reset ---
+// --- Handle Reset (ESC) ---
 window.addEventListener('keydown', (e) => {
   if (e.code === 'Escape' && aircraft) {
     // Reset to runway

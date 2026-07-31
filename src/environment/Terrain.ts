@@ -1,48 +1,752 @@
 import * as THREE from 'three';
 
-/** Terrain, sky, and clouds */
+// ============================================================
+//  Simplex Noise – compact 2D implementation
+// ============================================================
+class SimplexNoise {
+  private _perm = new Uint8Array(512);
+  private _grad3: [number, number][];
+
+  constructor(seed: number = 0) {
+    const p = new Uint8Array(256);
+    for (let i = 0; i < 256; i++) p[i] = i;
+    // Seed-based shuffle
+    let s = seed;
+    for (let i = 255; i > 0; i--) {
+      s = (s * 16807 + 0) % 2147483647;
+      const j = s % (i + 1);
+      [p[i], p[j]] = [p[j], p[i]];
+    }
+    for (let i = 0; i < 512; i++) this._perm[i] = p[i & 255];
+    this._grad3 = [
+      [1, 1], [-1, 1], [1, -1], [-1, -1],
+      [1, 0], [-1, 0], [0, 1], [0, -1],
+    ];
+  }
+
+  noise2D(x: number, z: number): number {
+    const F2 = 0.5 * (Math.sqrt(3) - 1);
+    const G2 = (3 - Math.sqrt(3)) / 6;
+    const s = (x + z) * F2;
+    const i = Math.floor(x + s);
+    const j = Math.floor(z + s);
+    const t = (i + j) * G2;
+    const X0 = i - t;
+    const Y0 = j - t;
+    const x0 = x - X0;
+    const y0 = z - Y0;
+    let i1 = x0 > y0 ? 1 : 0;
+    let j1 = x0 > y0 ? 0 : 1;
+    const x1 = x0 - i1 + G2;
+    const y1 = y0 - j1 + G2;
+    const x2 = x0 - 1 + 2 * G2;
+    const y2 = y0 - 1 + 2 * G2;
+    const ii = i & 255;
+    const jj = j & 255;
+    const contrib = (ux: number, uy: number, ix: number, iy: number): number => {
+      let t0 = 0.5 - ux * ux - uy * uy;
+      if (t0 < 0) return 0;
+      t0 *= t0;
+      const g = this._grad3[(this._perm[ix + iy] & 7)];
+      return t0 * t0 * (g[0] * ux + g[1] * uy);
+    };
+    return 70 * (
+      contrib(x0, y0, ii, jj) +
+      contrib(x1, y1, ii + i1, jj + j1) +
+      contrib(x2, y2, ii + 1, jj + 1)
+    );
+  }
+
+  // Fractal noise with multiple octaves
+  octaveNoise(x: number, z: number, octaves: number, lacunarity: number = 2, gain: number = 0.5): number {
+    let total = 0;
+    let amplitude = 1;
+    let frequency = 1;
+    let maxVal = 0;
+    for (let i = 0; i < octaves; i++) {
+      total += this.noise2D(x * frequency, z * frequency) * amplitude;
+      maxVal += amplitude;
+      amplitude *= gain;
+      frequency *= lacunarity;
+    }
+    return total / maxVal;
+  }
+}
+
+// ============================================================
+//  Terrain class
+// ============================================================
+/** Terrain with heightmap, airport, mountains, water, vegetation, infrastructure */
 export class Terrain {
   private _clouds = new THREE.Group();
+  private _waterGroup = new THREE.Group();
+  private _noise = new SimplexNoise(42);
+  private _heightCache = new Map<string, number>();
+
+  // Heightmap parameters
+  private readonly _terrainSize = 4000;       // world units
+  private readonly _segments = 200;
+  private readonly _maxHeight = 500;
+  private readonly _airportX = 1600;
+  private readonly _airportZ = 100;
 
   constructor(scene: THREE.Scene) {
-    this.createGround(scene);
     this.createSky(scene);
+    this.createHeightmapTerrain(scene);
+    this.createWater(scene);
+    this.createAirportBuildings(scene);
+    this.createVegetation(scene);
+    this.createInfrastructure(scene);
     this.createClouds(scene);
-    this.createMountains(scene);
-    this.createLakes(scene);
-    this.createTrees(scene);
-    this.createRoads(scene);
   }
 
-  private createGround(scene: THREE.Scene) {
-    // Main ground
-    const groundGeo = new THREE.PlaneGeometry(20000, 20000);
-    const groundMat = new THREE.MeshStandardMaterial({
-      color: 0x3a7d3a,
+  // ----------------------------------------------------------
+  //  Heightmap helpers
+  // ----------------------------------------------------------
+  /** Get terrain height at world (x, z) */
+  getHeight(x: number, z: number): number {
+    const key = `${Math.round(x)},${Math.round(z)}`;
+    if (this._heightCache.has(key)) return this._heightCache.get(key)!;
+    const h = this._rawHeight(x, z);
+    this._heightCache.set(key, h);
+    return h;
+  }
+
+  private _rawHeight(x: number, z: number): number {
+    // Airport flat zone - larger and smoother
+    const airportHalfX = 1000;
+    const airportHalfZ = 200;
+    const blendWidth = 400;
+
+    const distX = Math.abs(x);
+    const distZ = Math.abs(z);
+
+    // Inside airport: perfectly flat
+    if (distX < airportHalfX - blendWidth && distZ < airportHalfZ - blendWidth) {
+      return 0;
+    }
+
+    // Blend zone: smooth transition from flat to terrain
+    let blendX = 0;
+    let blendZ = 0;
+    if (distX >= airportHalfX - blendWidth && distX < airportHalfX) {
+      blendX = (distX - (airportHalfX - blendWidth)) / blendWidth;
+      blendX = smoothstep(blendX);
+    } else if (distX >= airportHalfX) {
+      blendX = 1;
+    }
+    if (distZ >= airportHalfZ - blendWidth && distZ < airportHalfZ) {
+      blendZ = (distZ - (airportHalfZ - blendWidth)) / blendWidth;
+      blendZ = smoothstep(blendZ);
+    } else if (distZ >= airportHalfZ) {
+      blendZ = 1;
+    }
+
+    const blendFactor = Math.max(blendX, blendZ);
+
+    // Outside airport: full terrain
+    if (blendFactor >= 1) {
+      return this._mountainHeight(x, z);
+    }
+
+    // Blend zone: mix between flat and terrain
+    const terrainH = this._mountainHeight(x, z);
+    return terrainH * blendFactor;
+  }
+
+  private _mountainHeight(x: number, z: number): number {
+    const scale = 0.001;
+    // Multi-octave noise for varied terrain
+    const n1 = this._noise.octaveNoise(x * scale, z * scale, 5, 2.0, 0.5);
+    // Ridge noise for sharp mountain peaks
+    const n2 = Math.abs(this._noise.octaveNoise((x + 500) * scale * 1.5, (z + 500) * scale * 1.5, 4, 2.2, 0.45));
+    // Valley noise - lower areas
+    const n3 = this._noise.octaveNoise((x + 1000) * scale * 0.5, (z + 1000) * scale * 0.5, 3, 1.8, 0.5);
+
+    const combined = n1 * 0.3 + n2 * n2 * 0.5 + n3 * 0.2;
+
+    // Map to height range: 0 to ~300m max
+    const height = Math.max(0, combined * 300);
+
+    // Flatten low areas (valleys)
+    if (height < 5) {
+      return height * 0.3;
+    }
+
+    return height;
+  }
+
+  // ----------------------------------------------------------
+  //  Heightmap terrain with vertex colors
+  // ----------------------------------------------------------
+  private createHeightmapTerrain(scene: THREE.Scene) {
+    const geo = new THREE.PlaneGeometry(
+      this._terrainSize, this._terrainSize,
+      this._segments, this._segments
+    );
+    const pos = geo.attributes.position;
+    const colors = new Float32Array(pos.count * 3);
+    const half = this._terrainSize / 2;
+
+    for (let i = 0; i < pos.count; i++) {
+      const vx = pos.getX(i) - half;
+      const vz = pos.getY(i) - half;
+      const h = this._rawHeight(vx, vz);
+      pos.setZ(i, h);
+
+      // Vertex color based on height + noise
+      const color = this._getTerrainColor(vx, vz, h);
+      colors[i * 3] = color.r;
+      colors[i * 3 + 1] = color.g;
+      colors[i * 3 + 2] = color.b;
+    }
+
+    geo.computeVertexNormals();
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    const mat = new THREE.MeshStandardMaterial({
+      vertexColors: true,
       roughness: 0.9,
-      metalness: 0.0
+      metalness: 0.0,
+      flatShading: false,
     });
-    const ground = new THREE.Mesh(groundGeo, groundMat);
-    ground.rotation.x = -Math.PI / 2;
-    ground.position.y = -0.1;
-    ground.receiveShadow = true;
-    scene.add(ground);
 
-    // Grid helper for spatial reference
-    const grid = new THREE.GridHelper(10000, 100, 0x2a5d2a, 0x2a5d2a);
-    grid.position.y = 0;
-    scene.add(grid);
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.receiveShadow = true;
+    mesh.castShadow = true;
+    scene.add(mesh);
   }
 
+  private _getTerrainColor(x: number, z: number, h: number): THREE.Color {
+    const moisture = this._noise.noise2D(x * 0.002, z * 0.002) * 0.5 + 0.5;
+    const detail = this._noise.noise2D(x * 0.01, z * 0.01) * 0.1;
+
+    // Color zones by height
+    const c = new THREE.Color();
+
+    if (h < 2) {
+      // Low-lying / wetland – dark green or sand
+      if (moisture > 0.5) {
+        c.setRGB(0.15 + detail, 0.25 + detail, 0.08);
+      } else {
+        c.setRGB(0.65 + detail, 0.58 + detail, 0.40);
+      }
+    } else if (h < 40) {
+      // Grass / fields
+      const green = 0.30 + moisture * 0.15 + detail;
+      c.setRGB(0.18 + detail, green, 0.08 + detail);
+    } else if (h < 100) {
+      // Forest / dark green
+      c.setRGB(0.10 + detail, 0.28 + moisture * 0.08, 0.06);
+    } else if (h < 200) {
+      // Mountain slope – brown/green mix
+      const t = (h - 100) / 100;
+      c.lerpColors(
+        new THREE.Color(0.10, 0.28, 0.06),
+        new THREE.Color(0.35, 0.28, 0.18),
+        t
+      );
+    } else if (h < 300) {
+      // Rock
+      const t = (h - 200) / 100;
+      c.lerpColors(
+        new THREE.Color(0.35, 0.28, 0.18),
+        new THREE.Color(0.45, 0.42, 0.38),
+        t
+      );
+    } else if (h < 400) {
+      // Snow transition
+      const t = (h - 300) / 100;
+      c.lerpColors(
+        new THREE.Color(0.45, 0.42, 0.38),
+        new THREE.Color(0.85, 0.85, 0.88),
+        t
+      );
+    } else {
+      // Snow cap
+      c.setRGB(0.90 + detail, 0.90 + detail, 0.92);
+    }
+
+    // Airport area – asphalt/concrete
+    if (Math.abs(x) < this._airportX && Math.abs(z) < this._airportZ) {
+      c.setRGB(0.28, 0.28, 0.26);
+    }
+
+    return c;
+  }
+
+  // ----------------------------------------------------------
+  //  Water – lakes + river
+  // ----------------------------------------------------------
+  private createWater(scene: THREE.Scene) {
+    const waterMat = new THREE.MeshStandardMaterial({
+      color: 0x1a6fa0,
+      transparent: true,
+      opacity: 0.7,
+      roughness: 0.05,
+      metalness: 0.4,
+    });
+
+    // Lakes in valleys
+    const lakes = [
+      { x: 800, z: 600, r: 100 },
+      { x: -600, z: 400, r: 80 },
+      { x: 1500, z: -400, r: 120 },
+      { x: -1200, z: -600, r: 90 },
+      { x: 300, z: -900, r: 110 },
+      { x: 1800, z: 1200, r: 70 },
+      { x: -1600, z: 800, r: 85 },
+    ];
+
+    lakes.forEach(l => {
+      const lakeGeo = new THREE.CircleGeometry(l.r, 32);
+      const lake = new THREE.Mesh(lakeGeo, waterMat);
+      lake.rotation.x = -Math.PI / 2;
+      const lh = this._rawHeight(l.x, l.z);
+      lake.position.set(l.x, Math.max(lh, 1.5), l.z);
+      this._waterGroup.add(lake);
+    });
+
+    // River – series of connected segments
+    const riverPath: [number, number][] = [];
+    for (let t = 0; t <= 1; t += 0.02) {
+      const rx = -2000 + t * 4000;
+      const rz = Math.sin(t * Math.PI * 3) * 800 + this._noise.noise2D(t * 5, 0) * 200;
+      riverPath.push([rx, rz]);
+    }
+
+    for (let i = 0; i < riverPath.length - 1; i++) {
+      const [x1, z1] = riverPath[i];
+      const [x2, z2] = riverPath[i + 1];
+      const mx = (x1 + x2) / 2;
+      const mz = (z1 + z2) / 2;
+      const dx = x2 - x1;
+      const dz = z2 - z1;
+      const len = Math.sqrt(dx * dx + dz * dz);
+      const angle = Math.atan2(dz, dx);
+      const riverGeo = new THREE.PlaneGeometry(len, 12);
+      const river = new THREE.Mesh(riverGeo, waterMat);
+      river.rotation.x = -Math.PI / 2;
+      river.rotation.z = -angle;
+      const rh = this._rawHeight(mx, mz);
+      river.position.set(mx, Math.max(rh, 1.5), mz);
+      this._waterGroup.add(river);
+    }
+
+    scene.add(this._waterGroup);
+  }
+
+  // ----------------------------------------------------------
+  //  Airport buildings
+  // ----------------------------------------------------------
+  private createAirportBuildings(scene: THREE.Scene) {
+    const concreteMat = new THREE.MeshStandardMaterial({ color: 0x999999, roughness: 0.8 });
+    const glassMat = new THREE.MeshStandardMaterial({
+      color: 0x88ccff, transparent: true, opacity: 0.5, roughness: 0.1, metalness: 0.8,
+    });
+    const roofMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.7 });
+    const metalMat = new THREE.MeshStandardMaterial({ color: 0x777777, roughness: 0.3, metalness: 0.7 });
+
+    // --- Terminal building ---
+    const terminalGroup = new THREE.Group();
+    // Main body
+    const termBody = new THREE.Mesh(
+      new THREE.BoxGeometry(120, 15, 50),
+      concreteMat
+    );
+    termBody.position.y = 7.5;
+    termBody.castShadow = true;
+    terminalGroup.add(termBody);
+    // Glass facade
+    const glass = new THREE.Mesh(
+      new THREE.BoxGeometry(122, 10, 2),
+      glassMat
+    );
+    glass.position.set(0, 10, 25);
+    terminalGroup.add(glass);
+    // Roof
+    const roof = new THREE.Mesh(
+      new THREE.BoxGeometry(130, 1, 55),
+      roofMat
+    );
+    roof.position.y = 15.5;
+    terminalGroup.add(roof);
+    terminalGroup.position.set(0, 0, 100);
+    scene.add(terminalGroup);
+
+    // --- Control Tower ---
+    const towerGroup = new THREE.Group();
+    // Tower shaft
+    const shaft = new THREE.Mesh(
+      new THREE.CylinderGeometry(4, 5, 35, 8),
+      concreteMat
+    );
+    shaft.position.y = 17.5;
+    shaft.castShadow = true;
+    towerGroup.add(shaft);
+    // Glass cabin
+    const cabin = new THREE.Mesh(
+      new THREE.CylinderGeometry(6, 6, 6, 12),
+      glassMat
+    );
+    cabin.position.y = 38;
+    towerGroup.add(cabin);
+    // Roof ring
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(6, 0.5, 8, 12),
+      metalMat
+    );
+    ring.position.y = 41;
+    ring.rotation.x = Math.PI / 2;
+    towerGroup.add(ring);
+    towerGroup.position.set(50, 0, 80);
+    scene.add(towerGroup);
+
+    // --- Hangars (3) ---
+    const hangarPositions = [
+      { x: -200, z: 200 },
+      { x: -300, z: 200 },
+      { x: 200, z: 200 },
+    ];
+    hangarPositions.forEach(hp => {
+      const hg = new THREE.Group();
+      // Floor
+      const floor = new THREE.Mesh(
+        new THREE.BoxGeometry(60, 0.3, 40),
+        new THREE.MeshStandardMaterial({ color: 0x444444 })
+      );
+      floor.position.y = 0.15;
+      hg.add(floor);
+      // Walls
+      const walls = new THREE.Mesh(
+        new THREE.BoxGeometry(60, 12, 2),
+        concreteMat
+      );
+      walls.position.set(0, 6, 19);
+      walls.castShadow = true;
+      hg.add(walls);
+      for (const s of [-1, 1]) {
+        const sideWall = new THREE.Mesh(
+          new THREE.BoxGeometry(2, 12, 40),
+          concreteMat
+        );
+        sideWall.position.set(s * 29, 6, 0);
+        hg.add(sideWall);
+      }
+      // Arched roof
+      const roofGeo = new THREE.CylinderGeometry(30, 30, 40, 16, 1, false, 0, Math.PI);
+      const roofMesh = new THREE.Mesh(roofGeo, roofMat);
+      roofMesh.rotation.z = Math.PI / 2;
+      roofMesh.position.set(0, 12, 0);
+      hg.add(roofMesh);
+      hg.position.set(hp.x, 0, hp.z);
+      scene.add(hg);
+    });
+
+    // --- Taxiways ---
+    const taxiMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.8 });
+    const taxiways = [
+      { x: 0, z: 65, w: 8, l: 70 },
+      { x: 50, z: 90, w: 8, l: 40 },
+      { x: -200, z: 130, w: 8, l: 70 },
+      { x: -300, z: 130, w: 8, l: 70 },
+      { x: 200, z: 130, w: 8, l: 70 },
+    ];
+    taxiways.forEach(tw => {
+      const twGeo = new THREE.PlaneGeometry(tw.l, tw.w);
+      const twMesh = new THREE.Mesh(twGeo, taxiMat);
+      twMesh.rotation.x = -Math.PI / 2;
+      twMesh.position.set(tw.x, 0.02, tw.z);
+      scene.add(twMesh);
+    });
+
+    // --- Fuel tanks ---
+    const fuelMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.4, metalness: 0.5 });
+    for (let i = 0; i < 3; i++) {
+      const tank = new THREE.Mesh(
+        new THREE.CylinderGeometry(5, 5, 10, 12),
+        fuelMat
+      );
+      tank.position.set(-400 + i * 15, 5, 150);
+      tank.castShadow = true;
+      scene.add(tank);
+      // Dome top
+      const dome = new THREE.Mesh(
+        new THREE.SphereGeometry(5, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+        fuelMat
+      );
+      dome.position.set(-400 + i * 15, 10, 150);
+      scene.add(dome);
+    }
+
+    // --- Small aircraft parking pads ---
+    const padMat = new THREE.MeshStandardMaterial({ color: 0x4a4a4a, roughness: 0.8 });
+    for (let i = 0; i < 4; i++) {
+      const pad = new THREE.Mesh(
+        new THREE.CircleGeometry(8, 16),
+        padMat
+      );
+      pad.rotation.x = -Math.PI / 2;
+      pad.position.set(300 + i * 25, 0.02, 160);
+      scene.add(pad);
+    }
+  }
+
+  // ----------------------------------------------------------
+  //  Vegetation – InstancedMesh for performance
+  // ----------------------------------------------------------
+  private createVegetation(scene: THREE.Scene) {
+    // --- Pine trees (cone) ---
+    const pineTrunkMat = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+    const pineCanopyMat = new THREE.MeshStandardMaterial({ color: 0x228B22 });
+
+    const pineTrunkGeo = new THREE.CylinderGeometry(0.3, 0.4, 4, 6);
+    const pineCanopyGeo = new THREE.ConeGeometry(2.5, 8, 8);
+
+    const pineCount = 800;
+    const pineTrunks = new THREE.InstancedMesh(pineTrunkGeo, pineTrunkMat, pineCount);
+    const pineCanopies = new THREE.InstancedMesh(pineCanopyGeo, pineCanopyMat, pineCount);
+    const dummy = new THREE.Object3D();
+    let pineIdx = 0;
+
+    for (let i = 0; i < pineCount && pineIdx < pineCount; i++) {
+      const x = (Math.random() - 0.5) * this._terrainSize;
+      const z = (Math.random() - 0.5) * this._terrainSize;
+      // Skip airport area
+      if (Math.abs(x) < this._airportX + 100 && Math.abs(z) < this._airportZ + 100) continue;
+      const h = this._rawHeight(x, z);
+      // Pines on hills and mountains
+      if (h < 15 || h > 350) continue;
+
+      const scale = 0.8 + Math.random() * 0.6;
+      // Trunk: base at terrain height, trunk center at h + 2*scale
+      dummy.position.set(x, h + 2 * scale, z);
+      dummy.scale.set(scale, scale, scale);
+      dummy.rotation.set(0, Math.random() * Math.PI * 2, 0);
+      dummy.updateMatrix();
+      pineTrunks.setMatrixAt(pineIdx, dummy.matrix);
+      // Canopy: centered above trunk
+      dummy.position.set(x, h + 4 * scale + 4 * scale, z);
+      dummy.updateMatrix();
+      pineCanopies.setMatrixAt(pineIdx, dummy.matrix);
+      pineIdx++;
+    }
+    pineTrunks.count = pineIdx;
+    pineCanopies.count = pineIdx;
+    pineTrunks.castShadow = true;
+    pineCanopies.castShadow = true;
+    scene.add(pineTrunks);
+    scene.add(pineCanopies);
+
+    // --- Deciduous trees (sphere canopy) ---
+    const decTrunkMat = new THREE.MeshStandardMaterial({ color: 0x8B6914 });
+    const decCanopyMats = [
+      new THREE.MeshStandardMaterial({ color: 0x2E8B57 }),
+      new THREE.MeshStandardMaterial({ color: 0x3CB371 }),
+      new THREE.MeshStandardMaterial({ color: 0x32CD32 }),
+    ];
+
+    const decTrunkGeo = new THREE.CylinderGeometry(0.3, 0.5, 3, 6);
+    const decCanopyGeo = new THREE.SphereGeometry(3, 8, 8);
+
+    const decCount = 600;
+    const decTrunks = new THREE.InstancedMesh(decTrunkGeo, decTrunkMat, decCount);
+    const decCanopies = new THREE.InstancedMesh(decCanopyGeo, decCanopyMats[0], decCount);
+    // Use instance color for variety
+    const decColors = new Float32Array(decCount * 3);
+    let decIdx = 0;
+
+    for (let i = 0; i < decCount && decIdx < decCount; i++) {
+      const x = (Math.random() - 0.5) * this._terrainSize;
+      const z = (Math.random() - 0.5) * this._terrainSize;
+      if (Math.abs(x) < this._airportX + 100 && Math.abs(z) < this._airportZ + 100) continue;
+      const h = this._rawHeight(x, z);
+      if (h < 5 || h > 150) continue;
+
+      const scale = 0.7 + Math.random() * 0.5;
+      dummy.position.set(x, h + 1.5 * scale, z);
+      dummy.scale.set(scale, scale, scale);
+      dummy.rotation.set(0, 0, 0);
+      dummy.updateMatrix();
+      decTrunks.setMatrixAt(decIdx, dummy.matrix);
+
+      dummy.position.y = h + 3 + 3 * scale;
+      dummy.updateMatrix();
+      decCanopies.setMatrixAt(decIdx, dummy.matrix);
+
+      const mat = decCanopyMats[Math.floor(Math.random() * decCanopyMats.length)];
+      const c = (mat as THREE.MeshStandardMaterial).color;
+      decColors[decIdx * 3] = c.r;
+      decColors[decIdx * 3 + 1] = c.g;
+      decColors[decIdx * 3 + 2] = c.b;
+      decIdx++;
+    }
+    decTrunks.count = decIdx;
+    decCanopies.count = decIdx;
+    decCanopies.instanceMatrix.setUsage(THREE.StaticDrawUsage);
+    const colorAttr = new THREE.InstancedBufferAttribute(decColors, 3);
+    colorAttr.setUsage(THREE.StaticDrawUsage);
+    decCanopies.instanceColor = colorAttr;
+    decTrunks.castShadow = true;
+    decCanopies.castShadow = true;
+    scene.add(decTrunks);
+    scene.add(decCanopies);
+
+    // --- Bushes / shrubs ---
+    const bushMat = new THREE.MeshStandardMaterial({ color: 0x2d6b2d });
+    const bushGeo = new THREE.SphereGeometry(1.2, 6, 6);
+    const bushCount = 400;
+    const bushes = new THREE.InstancedMesh(bushGeo, bushMat, bushCount);
+    let bushIdx = 0;
+
+    for (let i = 0; i < bushCount && bushIdx < bushCount; i++) {
+      const x = (Math.random() - 0.5) * this._terrainSize;
+      const z = (Math.random() - 0.5) * this._terrainSize;
+      if (Math.abs(x) < this._airportX + 50 && Math.abs(z) < this._airportZ + 50) continue;
+      const h = this._rawHeight(x, z);
+      if (h < 2 || h > 200) continue;
+
+      const scale = 0.5 + Math.random() * 0.8;
+      dummy.position.set(x, h + 0.6 * scale, z);
+      dummy.scale.set(scale, scale * 0.7, scale);
+      dummy.rotation.set(0, 0, 0);
+      dummy.updateMatrix();
+      bushes.setMatrixAt(bushIdx, dummy.matrix);
+      bushIdx++;
+    }
+    bushes.count = bushIdx;
+    bushes.castShadow = true;
+    scene.add(bushes);
+
+    // --- Grass patches (colored planes on terrain) ---
+    const grassPatchMats = [
+      new THREE.MeshStandardMaterial({ color: 0x4a8c3f, roughness: 0.9 }),
+      new THREE.MeshStandardMaterial({ color: 0x5a9c4f, roughness: 0.9 }),
+      new THREE.MeshStandardMaterial({ color: 0x6aaa5f, roughness: 0.9 }),
+    ];
+    for (let i = 0; i < 80; i++) {
+      const x = (Math.random() - 0.5) * this._terrainSize;
+      const z = (Math.random() - 0.5) * this._terrainSize;
+      if (Math.abs(x) < this._airportX + 50 && Math.abs(z) < this._airportZ + 50) continue;
+      const h = this._rawHeight(x, z);
+      if (h < 3 || h > 80) continue;
+
+      const size = 10 + Math.random() * 20;
+      const patch = new THREE.Mesh(
+        new THREE.CircleGeometry(size, 8),
+        grassPatchMats[Math.floor(Math.random() * grassPatchMats.length)]
+      );
+      patch.rotation.x = -Math.PI / 2;
+      patch.position.set(x, h + 0.1, z);
+      scene.add(patch);
+    }
+  }
+
+  // ----------------------------------------------------------
+  //  Infrastructure – roads, villages, bridges
+  // ----------------------------------------------------------
+  private createInfrastructure(scene: THREE.Scene) {
+    const roadMat = new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.8 });
+    const houseMat = new THREE.MeshStandardMaterial({ color: 0xc4a882, roughness: 0.8 });
+    const roofMat = new THREE.MeshStandardMaterial({ color: 0x8b3a3a, roughness: 0.7 });
+    const bridgeMat = new THREE.MeshStandardMaterial({ color: 0x666666, roughness: 0.6, metalness: 0.3 });
+
+    // --- Roads ---
+    const roads = [
+      { x: 0, z: 800, w: 12, l: 4000, rot: 0 },
+      { x: 0, z: -800, w: 12, l: 4000, rot: 0 },
+      { x: 1500, z: 0, w: 12, l: 2000, rot: Math.PI / 2 },
+      { x: -1500, z: 0, w: 12, l: 2000, rot: Math.PI / 2 },
+      { x: 600, z: 1200, w: 10, l: 1500, rot: 0.3 },
+      { x: -800, z: -1200, w: 10, l: 1200, rot: -0.2 },
+    ];
+
+    roads.forEach(r => {
+      const roadGeo = new THREE.PlaneGeometry(r.l, r.w);
+      const road = new THREE.Mesh(roadGeo, roadMat);
+      road.rotation.x = -Math.PI / 2;
+      road.rotation.z = r.rot;
+      road.position.set(r.x, 0.05, r.z);
+      scene.add(road);
+    });
+
+    // --- Villages ---
+    const villages = [
+      { cx: 600, cz: 1200, count: 8 },
+      { cx: -800, cz: -1000, count: 6 },
+      { cx: 1200, cz: -600, count: 5 },
+      { cx: -1000, cz: 600, count: 7 },
+    ];
+
+    villages.forEach(v => {
+      for (let i = 0; i < v.count; i++) {
+        const hx = v.cx + (Math.random() - 0.5) * 100;
+        const hz = v.cz + (Math.random() - 0.5) * 100;
+        const h = this._rawHeight(hx, hz);
+
+        const houseGroup = new THREE.Group();
+        // Main body
+        const body = new THREE.Mesh(
+          new THREE.BoxGeometry(6 + Math.random() * 4, 4 + Math.random() * 2, 5 + Math.random() * 3),
+          houseMat
+        );
+        body.position.y = body.geometry.parameters.height / 2;
+        body.castShadow = true;
+        houseGroup.add(body);
+        // Roof (prism)
+        const roofH = 3 + Math.random();
+        const roofW = body.geometry.parameters.width + 1;
+        const roofD = body.geometry.parameters.depth + 1;
+        const roofGeo = new THREE.ConeGeometry(Math.sqrt(roofW * roofW + roofD * roofD) / 2, roofH, 4);
+        const roof = new THREE.Mesh(roofGeo, roofMat);
+        roof.position.y = body.geometry.parameters.height + roofH / 2;
+        roof.rotation.y = Math.PI / 4;
+        houseGroup.add(roof);
+        houseGroup.position.set(hx, h, hz);
+        scene.add(houseGroup);
+      }
+    });
+
+    // --- Bridges over river ---
+    const bridgePositions = [
+      { x: 0, z: 800 },
+      { x: 800, z: 200 },
+      { x: -600, z: -400 },
+    ];
+
+    bridgePositions.forEach(bp => {
+      const h = this._rawHeight(bp.x, bp.z);
+      const bridge = new THREE.Mesh(
+        new THREE.BoxGeometry(20, 0.5, 16),
+        bridgeMat
+      );
+      bridge.position.set(bp.x, Math.max(h, 2) + 1, bp.z);
+      bridge.castShadow = true;
+      scene.add(bridge);
+      // Railings
+      for (const s of [-1, 1]) {
+        const rail = new THREE.Mesh(
+          new THREE.BoxGeometry(20, 1, 0.3),
+          bridgeMat
+        );
+        rail.position.set(bp.x, Math.max(h, 2) + 2, bp.z + s * 7.5);
+        scene.add(rail);
+      }
+    });
+  }
+
+  // ----------------------------------------------------------
+  //  Sky
+  // ----------------------------------------------------------
   private createSky(scene: THREE.Scene) {
-    // Sky gradient using a large sphere
     const skyGeo = new THREE.SphereGeometry(8000, 32, 32);
     const skyMat = new THREE.ShaderMaterial({
       uniforms: {
         topColor: { value: new THREE.Color(0x0077ff) },
         bottomColor: { value: new THREE.Color(0xffffff) },
         offset: { value: 20 },
-        exponent: { value: 0.6 }
+        exponent: { value: 0.6 },
       },
       vertexShader: `
         varying vec3 vWorldPosition;
@@ -63,26 +767,25 @@ export class Terrain {
           gl_FragColor = vec4(mix(bottomColor, topColor, max(pow(max(h, 0.0), exponent), 0.0)), 1.0);
         }
       `,
-      side: THREE.BackSide
+      side: THREE.BackSide,
     });
-    const sky = new THREE.Mesh(skyGeo, skyMat);
-    scene.add(sky);
+    scene.add(new THREE.Mesh(skyGeo, skyMat));
   }
 
+  // ----------------------------------------------------------
+  //  Clouds
+  // ----------------------------------------------------------
   private createClouds(scene: THREE.Scene) {
     const cloudMat = new THREE.MeshStandardMaterial({
       color: 0xffffff,
       transparent: true,
       opacity: 0.8,
       roughness: 1,
-      metalness: 0
+      metalness: 0,
     });
 
-    // Create scattered clouds at various heights
     for (let i = 0; i < 60; i++) {
       const cloudGroup = new THREE.Group();
-
-      // Each cloud is made of 3-6 overlapping spheres
       const numPuffs = 3 + Math.floor(Math.random() * 4);
       for (let j = 0; j < numPuffs; j++) {
         const radius = 20 + Math.random() * 40;
@@ -90,16 +793,15 @@ export class Terrain {
         puff.position.set(
           (Math.random() - 0.5) * 60,
           (Math.random() - 0.5) * 15,
-          (Math.random() - 0.5) * 30
+          (Math.random() - 0.5) * 30,
         );
         puff.scale.y = 0.4;
         cloudGroup.add(puff);
       }
-
       cloudGroup.position.set(
         (Math.random() - 0.5) * 8000,
-        50 + Math.random() * 300, // Lower altitude range: 50-350m (reachable by aircraft)
-        (Math.random() - 0.5) * 8000
+        50 + Math.random() * 300,
+        (Math.random() - 0.5) * 8000,
       );
       this._clouds.add(cloudGroup);
     }
@@ -107,158 +809,27 @@ export class Terrain {
     scene.add(this._clouds);
   }
 
-  private createMountains(scene: THREE.Scene) {
-    const mountainColors = [0x8B7355, 0x6B5B4F, 0x7B6B5F, 0x5B4B3F];
-    const snowColor = 0xffffff;
-    
-    // Create mountain ranges closer to the runway for better visibility
-    const ranges = [
-      { centerX: 2000, centerZ: 1200, count: 8 },
-      { centerX: -2000, centerZ: 1000, count: 6 },
-      { centerX: 2500, centerZ: -1200, count: 7 },
-      { centerX: -1800, centerZ: -1000, count: 6 },
-      { centerX: 3000, centerZ: 0, count: 5 },
-    ];
-
-    ranges.forEach(range => {
-      for (let i = 0; i < range.count; i++) {
-      const height = 150 + Math.random() * 350;
-      const radius = 60 + Math.random() * 80;
-        const x = range.centerX + (Math.random() - 0.5) * 800;
-        const z = range.centerZ + (Math.random() - 0.5) * 800;
-        
-        // Mountain cone
-        const mountainGeo = new THREE.ConeGeometry(radius, height, 8);
-        const mountainMat = new THREE.MeshStandardMaterial({
-          color: mountainColors[Math.floor(Math.random() * mountainColors.length)],
-          roughness: 0.9,
-          flatShading: true
-        });
-        const mountain = new THREE.Mesh(mountainGeo, mountainMat);
-        mountain.position.set(x, height / 2, z);
-        scene.add(mountain);
-
-        // Snow cap on tall mountains
-        if (height > 250) {
-          const snowHeight = height * 0.2;
-          const snowRadius = radius * 0.3;
-          const snowGeo = new THREE.ConeGeometry(snowRadius, snowHeight, 8);
-          const snowMat = new THREE.MeshStandardMaterial({
-            color: snowColor,
-            roughness: 0.5
-          });
-          const snow = new THREE.Mesh(snowGeo, snowMat);
-          snow.position.set(x, height - snowHeight / 2, z);
-          scene.add(snow);
-        }
-      }
-    });
-  }
-
-  private createLakes(scene: THREE.Scene) {
-    const lakePositions = [
-      { x: 800, z: 600, radius: 100 },
-      { x: -600, z: 400, radius: 80 },
-      { x: 1500, z: -400, radius: 120 },
-      { x: -1200, z: -600, radius: 90 },
-      { x: 300, z: -900, radius: 110 },
-    ];
-
-    lakePositions.forEach(lake => {
-      const lakeGeo = new THREE.CircleGeometry(lake.radius, 32);
-      const lakeMat = new THREE.MeshStandardMaterial({
-        color: 0x006994,
-        transparent: true,
-        opacity: 0.7,
-        roughness: 0.1,
-        metalness: 0.3
-      });
-      const lakeMesh = new THREE.Mesh(lakeGeo, lakeMat);
-      lakeMesh.rotation.x = -Math.PI / 2;
-      lakeMesh.position.set(lake.x, -0.05, lake.z);
-      scene.add(lakeMesh);
-    });
-  }
-
-  private createTrees(scene: THREE.Scene) {
-    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
-    const canopyMats = [
-      new THREE.MeshStandardMaterial({ color: 0x228B22 }),
-      new THREE.MeshStandardMaterial({ color: 0x2E8B57 }),
-      new THREE.MeshStandardMaterial({ color: 0x3CB371 }),
-    ];
-
-    // Create 500 trees scattered around, avoiding runway
-    for (let i = 0; i < 500; i++) {
-      let x, z;
-      let attempts = 0;
-      
-      // Find position outside runway area, closer to runway for visibility
-      do {
-        x = (Math.random() - 0.5) * 5000;
-        z = (Math.random() - 0.5) * 3000;
-        attempts++;
-      } while ((Math.abs(x) < 1600 && Math.abs(z) < 600) && attempts < 10);
-
-      // Skip if too close to runway
-      if (Math.abs(x) < 1600 && Math.abs(z) < 600) continue;
-
-      const treeGroup = new THREE.Group();
-      
-      // Trunk
-      const trunkHeight = 3 + Math.random() * 2;
-      const trunk = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.3, 0.4, trunkHeight, 6),
-        trunkMat
-      );
-      trunk.position.y = trunkHeight / 2;
-      treeGroup.add(trunk);
-
-      // Canopy
-      const canopyHeight = 5 + Math.random() * 5;
-      const canopyRadius = 2 + Math.random() * 2;
-      const canopy = new THREE.Mesh(
-        new THREE.ConeGeometry(canopyRadius, canopyHeight, 8),
-        canopyMats[Math.floor(Math.random() * canopyMats.length)]
-      );
-      canopy.position.y = trunkHeight + canopyHeight / 2;
-      treeGroup.add(canopy);
-
-      treeGroup.position.set(x, 0, z);
-      scene.add(treeGroup);
-    }
-  }
-
-  private createRoads(scene: THREE.Scene) {
-    const roadMat = new THREE.MeshStandardMaterial({
-      color: 0x444444,
-      roughness: 0.8
-    });
-
-    const roads = [
-      { x: 0, z: 800, width: 15, length: 4000, rotation: 0 },
-      { x: 0, z: -800, width: 15, length: 4000, rotation: 0 },
-      { x: 1500, z: 0, width: 15, length: 2000, rotation: Math.PI / 2 },
-      { x: -1500, z: 0, width: 15, length: 2000, rotation: Math.PI / 2 },
-    ];
-
-    roads.forEach(road => {
-      const roadGeo = new THREE.PlaneGeometry(road.length, road.width);
-      const roadMesh = new THREE.Mesh(roadGeo, roadMat);
-      roadMesh.rotation.x = -Math.PI / 2;
-      roadMesh.rotation.z = road.rotation;
-      roadMesh.position.set(road.x, 0.01, road.z);
-      scene.add(roadMesh);
-    });
-  }
-
+  // ----------------------------------------------------------
+  //  Update
+  // ----------------------------------------------------------
   update(dt: number) {
-    // Slowly drift clouds
+    // Drift clouds
     this._clouds.children.forEach(cloud => {
-      (cloud as THREE.Group).position.x += 5 * dt;
-      if ((cloud as THREE.Group).position.x > 4000) {
-        (cloud as THREE.Group).position.x = -4000;
-      }
+      cloud.position.x += 5 * dt;
+      if (cloud.position.x > 4000) cloud.position.x = -4000;
+    });
+
+    // Animate water (gentle wave)
+    this._waterGroup.children.forEach((w, i) => {
+      w.position.y += Math.sin(performance.now() * 0.001 + i) * 0.002;
     });
   }
+}
+
+// ----------------------------------------------------------
+//  Utility
+// ----------------------------------------------------------
+function smoothstep(t: number): number {
+  t = Math.max(0, Math.min(1, t));
+  return t * t * (3 - 2 * t);
 }

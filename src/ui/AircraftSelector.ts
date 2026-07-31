@@ -155,8 +155,8 @@ export class AircraftSelector {
     controls.style.cssText = 'margin-top: 40px; font-size: 13px; color: #555577; text-align: center; line-height: 1.8;';
     controls.innerHTML = `
       <div style="margin-bottom: 10px; color: #777799; font-weight: bold;">Controls</div>
-      <div>Pitch: W/S or ↑/↓ &nbsp;|&nbsp; Roll: A/D or ←/→ &nbsp;|&nbsp; Yaw: Q/E</div>
-      <div>Throttle: Shift↑ / Ctrl↓ &nbsp;|&nbsp; Flaps: G &nbsp;|&nbsp; Brakes: B &nbsp;|&nbsp; Reset: Esc</div>
+      <div>Pitch: W/S &nbsp;|&nbsp; Roll: A/D or ←/→ &nbsp;|&nbsp; Yaw: Q/E</div>
+      <div>Throttle: ↑/↓ &nbsp;|&nbsp; Flaps: G &nbsp;|&nbsp; Brakes: B &nbsp;|&nbsp; Reset: Esc &nbsp;|&nbsp; Menu: ESC</div>
     `;
     this._container.appendChild(controls);
 
