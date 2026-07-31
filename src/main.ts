@@ -10,6 +10,9 @@ import { Controls } from './input/Controls';
 import { HUD } from './ui/HUD';
 import { AircraftSelector } from './ui/AircraftSelector';
 import { MissionSystem } from './missions/MissionSystem';
+import { PostProcessingManager } from './rendering/PostProcessing';
+import { Atmosphere } from './rendering/Atmosphere';
+import { AirportLighting } from './environment/AirportLighting';
 
 // --- Three.js Setup ---
 const scene = new THREE.Scene();
@@ -43,6 +46,11 @@ scene.add(sunLight);
 const terrain = new Terrain(scene);
 const runway = new Runway(scene);
 const missionSystem = new MissionSystem(scene);
+
+// --- Atmosphere & Post-Processing ---
+const atmosphere = new Atmosphere(scene, sunLight.position);
+const postProcessing = new PostProcessingManager(scene, camera, renderer);
+const airportLighting = new AirportLighting(scene, runway.bounds);
 
 // --- Game State ---
 let aircraft: Aircraft | null = null;
@@ -119,6 +127,7 @@ window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  postProcessing.resize(window.innerWidth, window.innerHeight);
 });
 
 // --- Game Loop ---
@@ -201,8 +210,11 @@ function animate() {
   // Update terrain/clouds
   terrain.update(dt);
 
-  // Render
-  renderer.render(scene, camera);
+  // Update atmosphere sky position to follow camera
+  atmosphere.updateSkyPosition(camera.position);
+
+  // Render with post-processing pipeline
+  postProcessing.render();
 }
 
 animate();
