@@ -182,41 +182,43 @@ export class FlightModel {
     //  - AoA (stall = less control)
     //  - Aircraft type (acrobatic vs airliner)
     // ============================================================
-    if (speed > 0.5) {
-      // Control authority curve: low at slow speed, full at cruise+
-      const authorityMin = aircraft.config.rotateSpeed * 0.3;
-      const authorityMax = aircraft.config.rotateSpeed * 2.0;
-      let controlFactor = (speed - authorityMin) / (authorityMax - authorityMin);
-      controlFactor = Math.max(0.05, Math.min(1.0, controlFactor));
+    // Control authority: based on dynamic pressure (speed²) for realistic feel
+    // At stall speed, control authority should be ~50%, at cruise ~100%
+    const stallSpeed = aircraft.config.stallSpeed;
+    const cruiseSpeed = aircraft.config.maxSpeed * 0.6;
+    let controlFactor = (speed - stallSpeed * 0.5) / (cruiseSpeed - stallSpeed * 0.5);
+    controlFactor = Math.max(0.2, Math.min(1.0, controlFactor));
 
-      // Reduce control in stall
-      if (Math.abs(aoa) > stallAngle) {
-        controlFactor *= 0.4;
-      }
-
-      // Input mapping (signs matched to aircraft local axes)
-      const rollInput = (controls.rollRight ? 1 : 0) - (controls.rollLeft ? 1 : 0);  // D=right roll (+), A=left roll (-)
-      const pitchInput = (controls.pitchUp ? 1 : 0) - (controls.pitchDown ? 1 : 0);  // W=pitch up (+), S=pitch down (-)
-      const yawInput = (controls.yawRight ? 1 : 0) - (controls.yawLeft ? 1 : 0);     // E=yaw right (+), Q=yaw left (-)
-
-      // Angular rates (rad/s) with smooth response
-      const rollRate = rollInput * (aircraft.config.rollRate * Math.PI / 180) * controlFactor;
-      const pitchRate = pitchInput * (aircraft.config.pitchRate * Math.PI / 180) * controlFactor;
-      const yawRate = yawInput * (aircraft.config.yawRate * Math.PI / 180) * controlFactor;
-
-      // Apply rotations in LOCAL space (post-multiply = local frame rotation)
-      // Roll around forward axis, pitch around right axis, yaw around up axis
-      const rollQuat = new THREE.Quaternion().setFromAxisAngle(this._forward, rollRate * dt);
-      const pitchQuat = new THREE.Quaternion().setFromAxisAngle(this._right, pitchRate * dt);
-      const yawQuat = new THREE.Quaternion().setFromAxisAngle(this._up, yawRate * dt);
-
-      // Combine and apply in local space
-      const combined = new THREE.Quaternion().multiply(rollQuat).multiply(pitchQuat).multiply(yawQuat);
-      aircraft.group.quaternion.multiply(combined);
-
-      // Sync Euler rotation from quaternion
-      aircraft.rotation.setFromQuaternion(aircraft.group.quaternion, 'YXZ');
+    // Reduce control in deep stall
+    if (Math.abs(aoa) > stallAngle) {
+      const excessAngle = Math.abs(aoa) - stallAngle;
+      controlFactor *= Math.max(0.3, 1.0 - excessAngle * 1.5);
     }
+
+    // Input mapping
+    const rollInput = (controls.rollRight ? 1 : 0) - (controls.rollLeft ? 1 : 0);
+    const pitchInput = (controls.pitchUp ? 1 : 0) - (controls.pitchDown ? 1 : 0);
+    const yawInput = (controls.yawRight ? 1 : 0) - (controls.yawLeft ? 1 : 0);
+
+    // Angular rates (rad/s) - apply full rate at cruise, scaled by controlFactor
+    const rollRate = rollInput * (aircraft.config.rollRate * Math.PI / 180) * controlFactor;
+    const pitchRate = pitchInput * (aircraft.config.pitchRate * Math.PI / 180) * controlFactor;
+    const yawRate = yawInput * (aircraft.config.yawRate * Math.PI / 180) * controlFactor;
+
+    // Apply rotations in LOCAL space using quaternions
+    // Roll around FORWARD axis (nose-to-tail)
+    // Pitch around RIGHT axis (wing-to-wing, negated for correct direction)
+    // Yaw around UP axis (bottom-to-top)
+    const rollQuat = new THREE.Quaternion().setFromAxisAngle(this._forward, rollRate * dt);
+    const pitchQuat = new THREE.Quaternion().setFromAxisAngle(this._right, -pitchRate * dt);  // Negated for correct pitch direction
+    const yawQuat = new THREE.Quaternion().setFromAxisAngle(this._up, yawRate * dt);
+
+    // Combine and apply in local space (post-multiply)
+    const combined = new THREE.Quaternion().multiply(rollQuat).multiply(pitchQuat).multiply(yawQuat);
+    aircraft.group.quaternion.multiply(combined);
+
+    // Sync Euler rotation from quaternion
+    aircraft.rotation.setFromQuaternion(aircraft.group.quaternion, 'YXZ');
 
     // ============================================================
     //  Integrate position

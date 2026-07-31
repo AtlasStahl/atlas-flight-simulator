@@ -1,4 +1,7 @@
 import * as THREE from 'three';
+import { RealisticTrees } from './RealisticTrees';
+import { AirportBuildings } from './AirportBuildings';
+import { AirportVehicles } from './AirportVehicles';
 
 // ============================================================
 //  Simplex Noise – compact 2D implementation
@@ -94,7 +97,8 @@ export class Terrain {
     this.createSky(scene);
     this.createHeightmapTerrain(scene);
     this.createWater(scene);
-    this.createAirportBuildings(scene);
+    new AirportBuildings().createBuildings(scene);
+    new AirportVehicles().createVehicles(scene);
     this.createVegetation(scene);
     this.createInfrastructure(scene);
     this.createClouds(scene);
@@ -186,11 +190,12 @@ export class Terrain {
     );
     const pos = geo.attributes.position;
     const colors = new Float32Array(pos.count * 3);
-    const half = this._terrainSize / 2;
 
     for (let i = 0; i < pos.count; i++) {
-      const vx = pos.getX(i) - half;
-      const vz = pos.getY(i) - half;
+      // PlaneGeometry is already centered at origin (-half to +half)
+      // pos.getX(i) and pos.getY(i) are already world coordinates
+      const vx = pos.getX(i);
+      const vz = pos.getY(i);
       const h = this._rawHeight(vx, vz);
       pos.setZ(i, h);
 
@@ -338,309 +343,15 @@ export class Terrain {
   }
 
   // ----------------------------------------------------------
-  //  Airport buildings
+  //  Vegetation – delegated to RealisticTrees
   // ----------------------------------------------------------
-  private createAirportBuildings(scene: THREE.Scene) {
-    const concreteMat = new THREE.MeshStandardMaterial({ color: 0x999999, roughness: 0.8 });
-    const glassMat = new THREE.MeshStandardMaterial({
-      color: 0x88ccff, transparent: true, opacity: 0.5, roughness: 0.1, metalness: 0.8,
-    });
-    const roofMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.7 });
-    const metalMat = new THREE.MeshStandardMaterial({ color: 0x777777, roughness: 0.3, metalness: 0.7 });
-
-    // --- Terminal building ---
-    const terminalGroup = new THREE.Group();
-    // Main body
-    const termBody = new THREE.Mesh(
-      new THREE.BoxGeometry(120, 15, 50),
-      concreteMat
+  private createVegetation(scene: THREE.Scene): void {
+    const trees = new RealisticTrees(
+      this._rawHeight.bind(this),
+      this._airportX,
+      this._airportZ
     );
-    termBody.position.y = 7.5;
-    termBody.castShadow = true;
-    terminalGroup.add(termBody);
-    // Glass facade
-    const glass = new THREE.Mesh(
-      new THREE.BoxGeometry(122, 10, 2),
-      glassMat
-    );
-    glass.position.set(0, 10, 25);
-    terminalGroup.add(glass);
-    // Roof
-    const roof = new THREE.Mesh(
-      new THREE.BoxGeometry(130, 1, 55),
-      roofMat
-    );
-    roof.position.y = 15.5;
-    terminalGroup.add(roof);
-    terminalGroup.position.set(0, 0, 100);
-    scene.add(terminalGroup);
-
-    // --- Control Tower ---
-    const towerGroup = new THREE.Group();
-    // Tower shaft
-    const shaft = new THREE.Mesh(
-      new THREE.CylinderGeometry(4, 5, 35, 8),
-      concreteMat
-    );
-    shaft.position.y = 17.5;
-    shaft.castShadow = true;
-    towerGroup.add(shaft);
-    // Glass cabin
-    const cabin = new THREE.Mesh(
-      new THREE.CylinderGeometry(6, 6, 6, 12),
-      glassMat
-    );
-    cabin.position.y = 38;
-    towerGroup.add(cabin);
-    // Roof ring
-    const ring = new THREE.Mesh(
-      new THREE.TorusGeometry(6, 0.5, 8, 12),
-      metalMat
-    );
-    ring.position.y = 41;
-    ring.rotation.x = Math.PI / 2;
-    towerGroup.add(ring);
-    towerGroup.position.set(50, 0, 80);
-    scene.add(towerGroup);
-
-    // --- Hangars (3) ---
-    const hangarPositions = [
-      { x: -200, z: 200 },
-      { x: -300, z: 200 },
-      { x: 200, z: 200 },
-    ];
-    hangarPositions.forEach(hp => {
-      const hg = new THREE.Group();
-      // Floor
-      const floor = new THREE.Mesh(
-        new THREE.BoxGeometry(60, 0.3, 40),
-        new THREE.MeshStandardMaterial({ color: 0x444444 })
-      );
-      floor.position.y = 0.15;
-      hg.add(floor);
-      // Walls
-      const walls = new THREE.Mesh(
-        new THREE.BoxGeometry(60, 12, 2),
-        concreteMat
-      );
-      walls.position.set(0, 6, 19);
-      walls.castShadow = true;
-      hg.add(walls);
-      for (const s of [-1, 1]) {
-        const sideWall = new THREE.Mesh(
-          new THREE.BoxGeometry(2, 12, 40),
-          concreteMat
-        );
-        sideWall.position.set(s * 29, 6, 0);
-        hg.add(sideWall);
-      }
-      // Arched roof
-      const roofGeo = new THREE.CylinderGeometry(30, 30, 40, 16, 1, false, 0, Math.PI);
-      const roofMesh = new THREE.Mesh(roofGeo, roofMat);
-      roofMesh.rotation.z = Math.PI / 2;
-      roofMesh.position.set(0, 12, 0);
-      hg.add(roofMesh);
-      hg.position.set(hp.x, 0, hp.z);
-      scene.add(hg);
-    });
-
-    // --- Taxiways ---
-    const taxiMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.8 });
-    const taxiways = [
-      { x: 0, z: 65, w: 8, l: 70 },
-      { x: 50, z: 90, w: 8, l: 40 },
-      { x: -200, z: 130, w: 8, l: 70 },
-      { x: -300, z: 130, w: 8, l: 70 },
-      { x: 200, z: 130, w: 8, l: 70 },
-    ];
-    taxiways.forEach(tw => {
-      const twGeo = new THREE.PlaneGeometry(tw.l, tw.w);
-      const twMesh = new THREE.Mesh(twGeo, taxiMat);
-      twMesh.rotation.x = -Math.PI / 2;
-      twMesh.position.set(tw.x, 0.02, tw.z);
-      scene.add(twMesh);
-    });
-
-    // --- Fuel tanks ---
-    const fuelMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.4, metalness: 0.5 });
-    for (let i = 0; i < 3; i++) {
-      const tank = new THREE.Mesh(
-        new THREE.CylinderGeometry(5, 5, 10, 12),
-        fuelMat
-      );
-      tank.position.set(-400 + i * 15, 5, 150);
-      tank.castShadow = true;
-      scene.add(tank);
-      // Dome top
-      const dome = new THREE.Mesh(
-        new THREE.SphereGeometry(5, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2),
-        fuelMat
-      );
-      dome.position.set(-400 + i * 15, 10, 150);
-      scene.add(dome);
-    }
-
-    // --- Small aircraft parking pads ---
-    const padMat = new THREE.MeshStandardMaterial({ color: 0x4a4a4a, roughness: 0.8 });
-    for (let i = 0; i < 4; i++) {
-      const pad = new THREE.Mesh(
-        new THREE.CircleGeometry(8, 16),
-        padMat
-      );
-      pad.rotation.x = -Math.PI / 2;
-      pad.position.set(300 + i * 25, 0.02, 160);
-      scene.add(pad);
-    }
-  }
-
-  // ----------------------------------------------------------
-  //  Vegetation – InstancedMesh for performance
-  // ----------------------------------------------------------
-  private createVegetation(scene: THREE.Scene) {
-    // --- Pine trees (cone) ---
-    const pineTrunkMat = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
-    const pineCanopyMat = new THREE.MeshStandardMaterial({ color: 0x228B22 });
-
-    const pineTrunkGeo = new THREE.CylinderGeometry(0.3, 0.4, 4, 6);
-    const pineCanopyGeo = new THREE.ConeGeometry(2.5, 8, 8);
-
-    const pineCount = 800;
-    const pineTrunks = new THREE.InstancedMesh(pineTrunkGeo, pineTrunkMat, pineCount);
-    const pineCanopies = new THREE.InstancedMesh(pineCanopyGeo, pineCanopyMat, pineCount);
-    const dummy = new THREE.Object3D();
-    let pineIdx = 0;
-
-    for (let i = 0; i < pineCount && pineIdx < pineCount; i++) {
-      const x = (Math.random() - 0.5) * this._terrainSize;
-      const z = (Math.random() - 0.5) * this._terrainSize;
-      // Skip airport area
-      if (Math.abs(x) < this._airportX + 100 && Math.abs(z) < this._airportZ + 100) continue;
-      const h = this._rawHeight(x, z);
-      // Pines on hills and mountains
-      if (h < 15 || h > 350) continue;
-
-      const scale = 0.8 + Math.random() * 0.6;
-      // Trunk: base at terrain height, trunk center at h + 2*scale
-      dummy.position.set(x, h + 2 * scale, z);
-      dummy.scale.set(scale, scale, scale);
-      dummy.rotation.set(0, Math.random() * Math.PI * 2, 0);
-      dummy.updateMatrix();
-      pineTrunks.setMatrixAt(pineIdx, dummy.matrix);
-      // Canopy: centered above trunk
-      dummy.position.set(x, h + 4 * scale + 4 * scale, z);
-      dummy.updateMatrix();
-      pineCanopies.setMatrixAt(pineIdx, dummy.matrix);
-      pineIdx++;
-    }
-    pineTrunks.count = pineIdx;
-    pineCanopies.count = pineIdx;
-    pineTrunks.castShadow = true;
-    pineCanopies.castShadow = true;
-    scene.add(pineTrunks);
-    scene.add(pineCanopies);
-
-    // --- Deciduous trees (sphere canopy) ---
-    const decTrunkMat = new THREE.MeshStandardMaterial({ color: 0x8B6914 });
-    const decCanopyMats = [
-      new THREE.MeshStandardMaterial({ color: 0x2E8B57 }),
-      new THREE.MeshStandardMaterial({ color: 0x3CB371 }),
-      new THREE.MeshStandardMaterial({ color: 0x32CD32 }),
-    ];
-
-    const decTrunkGeo = new THREE.CylinderGeometry(0.3, 0.5, 3, 6);
-    const decCanopyGeo = new THREE.SphereGeometry(3, 8, 8);
-
-    const decCount = 600;
-    const decTrunks = new THREE.InstancedMesh(decTrunkGeo, decTrunkMat, decCount);
-    const decCanopies = new THREE.InstancedMesh(decCanopyGeo, decCanopyMats[0], decCount);
-    // Use instance color for variety
-    const decColors = new Float32Array(decCount * 3);
-    let decIdx = 0;
-
-    for (let i = 0; i < decCount && decIdx < decCount; i++) {
-      const x = (Math.random() - 0.5) * this._terrainSize;
-      const z = (Math.random() - 0.5) * this._terrainSize;
-      if (Math.abs(x) < this._airportX + 100 && Math.abs(z) < this._airportZ + 100) continue;
-      const h = this._rawHeight(x, z);
-      if (h < 5 || h > 150) continue;
-
-      const scale = 0.7 + Math.random() * 0.5;
-      dummy.position.set(x, h + 1.5 * scale, z);
-      dummy.scale.set(scale, scale, scale);
-      dummy.rotation.set(0, 0, 0);
-      dummy.updateMatrix();
-      decTrunks.setMatrixAt(decIdx, dummy.matrix);
-
-      dummy.position.y = h + 3 + 3 * scale;
-      dummy.updateMatrix();
-      decCanopies.setMatrixAt(decIdx, dummy.matrix);
-
-      const mat = decCanopyMats[Math.floor(Math.random() * decCanopyMats.length)];
-      const c = (mat as THREE.MeshStandardMaterial).color;
-      decColors[decIdx * 3] = c.r;
-      decColors[decIdx * 3 + 1] = c.g;
-      decColors[decIdx * 3 + 2] = c.b;
-      decIdx++;
-    }
-    decTrunks.count = decIdx;
-    decCanopies.count = decIdx;
-    decCanopies.instanceMatrix.setUsage(THREE.StaticDrawUsage);
-    const colorAttr = new THREE.InstancedBufferAttribute(decColors, 3);
-    colorAttr.setUsage(THREE.StaticDrawUsage);
-    decCanopies.instanceColor = colorAttr;
-    decTrunks.castShadow = true;
-    decCanopies.castShadow = true;
-    scene.add(decTrunks);
-    scene.add(decCanopies);
-
-    // --- Bushes / shrubs ---
-    const bushMat = new THREE.MeshStandardMaterial({ color: 0x2d6b2d });
-    const bushGeo = new THREE.SphereGeometry(1.2, 6, 6);
-    const bushCount = 400;
-    const bushes = new THREE.InstancedMesh(bushGeo, bushMat, bushCount);
-    let bushIdx = 0;
-
-    for (let i = 0; i < bushCount && bushIdx < bushCount; i++) {
-      const x = (Math.random() - 0.5) * this._terrainSize;
-      const z = (Math.random() - 0.5) * this._terrainSize;
-      if (Math.abs(x) < this._airportX + 50 && Math.abs(z) < this._airportZ + 50) continue;
-      const h = this._rawHeight(x, z);
-      if (h < 2 || h > 200) continue;
-
-      const scale = 0.5 + Math.random() * 0.8;
-      dummy.position.set(x, h + 0.6 * scale, z);
-      dummy.scale.set(scale, scale * 0.7, scale);
-      dummy.rotation.set(0, 0, 0);
-      dummy.updateMatrix();
-      bushes.setMatrixAt(bushIdx, dummy.matrix);
-      bushIdx++;
-    }
-    bushes.count = bushIdx;
-    bushes.castShadow = true;
-    scene.add(bushes);
-
-    // --- Grass patches (colored planes on terrain) ---
-    const grassPatchMats = [
-      new THREE.MeshStandardMaterial({ color: 0x4a8c3f, roughness: 0.9 }),
-      new THREE.MeshStandardMaterial({ color: 0x5a9c4f, roughness: 0.9 }),
-      new THREE.MeshStandardMaterial({ color: 0x6aaa5f, roughness: 0.9 }),
-    ];
-    for (let i = 0; i < 80; i++) {
-      const x = (Math.random() - 0.5) * this._terrainSize;
-      const z = (Math.random() - 0.5) * this._terrainSize;
-      if (Math.abs(x) < this._airportX + 50 && Math.abs(z) < this._airportZ + 50) continue;
-      const h = this._rawHeight(x, z);
-      if (h < 3 || h > 80) continue;
-
-      const size = 10 + Math.random() * 20;
-      const patch = new THREE.Mesh(
-        new THREE.CircleGeometry(size, 8),
-        grassPatchMats[Math.floor(Math.random() * grassPatchMats.length)]
-      );
-      patch.rotation.x = -Math.PI / 2;
-      patch.position.set(x, h + 0.1, z);
-      scene.add(patch);
-    }
+    trees.createVegetation(scene, this._terrainSize);
   }
 
   // ----------------------------------------------------------
