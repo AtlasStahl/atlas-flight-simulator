@@ -1,18 +1,23 @@
 import * as THREE from 'three';
-import { type AircraftConfig } from './aircraft/AircraftConfig';
+import { type AircraftConfig, AIRCRAFT_CONFIGS } from './aircraft/AircraftConfig';
 import { Aircraft } from './aircraft/Aircraft';
 import { FlightModel } from './physics/FlightModel';
 import { GroundCollision } from './physics/GroundCollision';
 import { Terrain } from './environment/Terrain';
 import { Runway } from './environment/Runway';
-import { ChaseCamera } from './camera/ChaseCamera';
+import { CameraManager, CameraMode } from './camera/CameraManager';
 import { Controls } from './input/Controls';
 import { HUD } from './ui/HUD';
-import { AircraftSelector } from './ui/AircraftSelector';
+import { AdvancedMenu } from './ui/AdvancedMenu';
 import { MissionSystem } from './missions/MissionSystem';
 import { PostProcessingManager } from './rendering/PostProcessing';
 import { Atmosphere } from './rendering/Atmosphere';
 import { AirportLighting } from './environment/AirportLighting';
+import { EngineEffects } from './aircraft/EngineEffects';
+import { WeatherSystem, WEATHER_PRESETS } from './weather/WeatherSystem';
+import { CombatManager } from './combat/CombatManager';
+import { RadarDisplay } from './ui/RadarDisplay';
+import { GameMode, GAME_MODES } from './game/GameMode';
 
 // --- Three.js Setup ---
 const scene = new THREE.Scene();
@@ -52,14 +57,27 @@ const atmosphere = new Atmosphere(scene, sunLight.position);
 const postProcessing = new PostProcessingManager(scene, camera, renderer);
 const airportLighting = new AirportLighting(scene, runway.bounds);
 
+// --- Weather ---
+let weatherSystem: WeatherSystem | null = null;
+
+// --- Combat ---
+const combatManager = new CombatManager(scene);
+
 // --- Game State ---
 let aircraft: Aircraft | null = null;
 const flightModel = new FlightModel();
 const groundCollision = new GroundCollision(terrain.getHeight.bind(terrain));
-const chaseCamera = new ChaseCamera(camera);
+const cameraManager = new CameraManager(camera);
 const controls = new Controls();
 let hud: HUD | null = null;
-let selector: AircraftSelector | null = null;
+let radar: RadarDisplay | null = null;
+let engineEffects: EngineEffects | null = null;
+let menu: AdvancedMenu | null = null;
+
+// Selected options
+let selectedAircraft: string = 'cessna';
+let selectedWeather: string = 'clear';
+let selectedGameMode: GameMode = GameMode.FREE_FLIGHT;
 
 // Runway bounds for collision detection
 const runwayBounds = runway.bounds;
@@ -73,16 +91,41 @@ function returnToMenu() {
   if (hud) {
     hud.hide();
   }
-  // Show selector
-  if (selector) {
-    selector.show();
+  if (radar) {
+    radar.hide();
+  }
+  
+  // Stop combat
+  combatManager.reset();
+  
+  // Remove aircraft
+  if (aircraft) {
+    scene.remove(aircraft.group);
+    aircraft = null;
+  }
+  if (engineEffects) {
+    scene.remove(engineEffects.group);
+    engineEffects = null;
+  }
+  
+  // Show menu
+  if (menu) {
+    menu.show();
   }
 }
 
-function startGame(config: AircraftConfig) {
+function startGame(config: AircraftConfig, weather: string, gameMode: GameMode) {
+  // Store selected options
+  selectedAircraft = config.type;
+  selectedWeather = weather;
+  selectedGameMode = gameMode;
+  
   // Remove old aircraft if exists
   if (aircraft) {
     scene.remove(aircraft.group);
+  }
+  if (engineEffects) {
+    scene.remove(engineEffects.group);
   }
 
   // Create new aircraft
@@ -91,35 +134,100 @@ function startGame(config: AircraftConfig) {
   aircraft.rotation.copy(startRot);
   scene.add(aircraft.group);
 
+  // Engine effects (nav lights attached to aircraft)
+  engineEffects = new EngineEffects(aircraft.group);
+
   // Reset systems
   groundCollision.reset();
   missionSystem.reset(scene);
+  combatManager.reset();
+  
+  // Setup weather
+  if (weatherSystem) {
+    weatherSystem.cleanup();
+  }
+  weatherSystem = new WeatherSystem(scene, WEATHER_PRESETS[weather] || WEATHER_PRESETS.clear);
+  
+  // Update atmosphere fog based on weather
+  const weatherConfig = WEATHER_PRESETS[weather] || WEATHER_PRESETS.clear;
+  atmosphere.setFogDensity(weatherConfig.fogDensity);
+
+  // Setup game mode
+  if (gameMode === GameMode.COMBAT) {
+    combatManager.startWave();
+  } else if (gameMode === GameMode.RING_MISSION) {
+    missionSystem.reset(scene);
+  }
 
   // Create HUD with menu callback
   if (!hud) {
-    hud = new HUD(returnToMenu);
+    hud = new HUD(returnToMenu, gameMode);
+  } else {
+    hud.setGameMode(gameMode);
   }
   hud.show();
 
-  // Hide selector
-  if (selector) {
-    selector.hide();
+  // Create radar for combat mode
+  if (gameMode === GameMode.COMBAT) {
+    if (!radar) {
+      radar = new RadarDisplay();
+    }
+    radar.show();
+  } else {
+    if (radar) {
+      radar.hide();
+    }
+  }
+
+  // Hide menu
+  if (menu) {
+    menu.hide();
   }
 }
 
-// --- Show Aircraft Selector ---
-selector = new AircraftSelector(startGame);
+// --- Show Advanced Menu ---
+menu = new AdvancedMenu(startGame);
 
 // --- Handle Reset (ESC) ---
 window.addEventListener('keydown', (e) => {
   if (e.code === 'Escape' && aircraft) {
-    // Reset to runway
-    aircraft.position.copy(startPos);
-    aircraft.rotation.copy(startRot);
-    aircraft.reset(aircraft.config);
-    groundCollision.reset();
-    missionSystem.reset(scene);
+    returnToMenu();
   }
+});
+
+// --- Handle Camera controls ---
+let isDragging = false;
+let lastMouseX = 0;
+let lastMouseY = 0;
+
+renderer.domElement.addEventListener('mousedown', (e) => {
+  if (e.button === 2) { // Right mouse
+    isDragging = true;
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
+  }
+});
+
+renderer.domElement.addEventListener('mousemove', (e) => {
+  if (isDragging) {
+    const dx = e.clientX - lastMouseX;
+    const dy = e.clientY - lastMouseY;
+    cameraManager.onMouseMove(dx, dy);
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
+  }
+});
+
+renderer.domElement.addEventListener('mouseup', () => {
+  isDragging = false;
+});
+
+renderer.domElement.addEventListener('wheel', (e) => {
+  cameraManager.onMouseWheel(e.deltaY);
+});
+
+renderer.domElement.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
 });
 
 // --- Handle Window Resize ---
@@ -132,6 +240,7 @@ window.addEventListener('resize', () => {
 
 // --- Game Loop ---
 let lastTime = performance.now();
+let cameraCycleTimer = 0;
 
 function animate() {
   requestAnimationFrame(animate);
@@ -147,8 +256,26 @@ function animate() {
     // Update controls
     controls.update();
 
+    // Cycle camera on C key (with debounce)
+    if (controls.cycleCamera) {
+      if (cameraCycleTimer <= 0) {
+        cameraCycleTimer = 0.4;
+        const newMode = cameraManager.cycleMode();
+        console.log('Camera switched to:', newMode);
+      }
+    }
+    cameraCycleTimer -= dt;
+
     // Update flight physics
     flightModel.update(aircraft, controls, dt);
+
+    // Apply weather effects
+    if (weatherSystem) {
+      const windEffect = weatherSystem.getWindEffect(aircraft.velocity);
+      const turbulence = weatherSystem.getTurbulence(now / 1000);
+      aircraft.velocity.add(windEffect);
+      aircraft.velocity.add(turbulence);
+    }
 
     // Update ground collision
     groundCollision.update(aircraft, controls, dt, runwayBounds);
@@ -159,14 +286,14 @@ function animate() {
     // Update propeller
     aircraft.updatePropeller(dt);
 
-    // If crashed, keep camera at a reasonable viewing distance
-    if (aircraft.crashed) {
-      chaseCamera.update(aircraft.position, aircraft.rotation, dt);
-    }
-
     // Sync 3D model with physics state
     aircraft.group.position.copy(aircraft.position);
     aircraft.group.rotation.copy(aircraft.rotation);
+
+    // Update engine effects
+    if (engineEffects) {
+      engineEffects.update(now / 1000, aircraft.throttle);
+    }
 
     // Move sun light to follow aircraft (for shadow rendering)
     sunLight.position.set(
@@ -177,11 +304,25 @@ function animate() {
     sunLight.target.position.copy(aircraft.position);
     sunLight.target.updateMatrixWorld();
 
-    // Update chase camera
-    chaseCamera.update(aircraft.position, aircraft.rotation, dt);
+    // Update camera
+    cameraManager.update(aircraft.position, aircraft.rotation, dt);
+
+    // Update combat
+    if (selectedGameMode === GameMode.COMBAT) {
+      const combatResult = combatManager.update(dt, aircraft.position, aircraft.rotation, now / 1000, { shoot: controls.shoot });
+      
+      if (combatResult.playerHit) {
+        // Flash screen red or play sound
+      }
+    }
 
     // Update mission system
     const missionStatus = missionSystem.update(aircraft.position);
+
+    // Update weather
+    if (weatherSystem) {
+      weatherSystem.update(dt, aircraft.position);
+    }
 
     // Update HUD
     if (hud) {
@@ -202,8 +343,22 @@ function animate() {
         roll,
         groundCollision.taxiMode,
         aircraft.crashed,
-        missionStatus
+        missionStatus,
+        cameraManager.mode,
+        selectedGameMode === GameMode.COMBAT ? {
+          wave: combatManager.wave,
+          score: combatManager.score,
+          playerHealth: combatManager.playerHealth,
+          maxPlayerHealth: combatManager.maxPlayerHealth,
+          enemiesAlive: combatManager.enemiesAlive,
+          totalEnemies: combatManager.totalEnemiesInWave
+        } : undefined
       );
+    }
+    
+    // Update radar
+    if (radar && selectedGameMode === GameMode.COMBAT) {
+      radar.update(aircraft.position, Math.atan2(aircraft.velocity.z, aircraft.velocity.x));
     }
   }
 

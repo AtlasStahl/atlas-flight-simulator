@@ -93,5 +93,43 @@ export const AIRCRAFT_CONFIGS: Record<string, AircraftConfig> = {
     color: 0xff0000,
     scale: 0.8,
     type: 'extra'
+  },
+  f16: {
+    name: 'F-16 Fighting Falcon',
+    maxSpeed: 350,        // ~1260 km/h
+    rotateSpeed: 80,      // ~288 km/h
+    maxClimbRate: 25,     // ~5000 ft/min
+    rollRate: 360,
+    pitchRate: 120,
+    yawRate: 60,
+    throttleResponse: 0.85,
+    maxThrust: 128000,
+    mass: 13000,
+    wingArea: 27.87,
+    dragCoefficient: 0.018,
+    liftCoefficient: 1.6,
+    stallSpeed: 40,       // ~144 km/h
+    color: 0x556b2f,      // Military green
+    scale: 1.2,
+    type: 'f16'
+  },
+  su27: {
+    name: 'Su-27 Flanker',
+    maxSpeed: 380,        // ~1368 km/h
+    rotateSpeed: 85,      // ~306 km/h
+    maxClimbRate: 28,     // ~5500 ft/min
+    rollRate: 300,
+    pitchRate: 100,
+    yawRate: 50,
+    throttleResponse: 0.8,
+    maxThrust: 222000,
+    mass: 23000,
+    wingArea: 43.5,
+    dragCoefficient: 0.02,
+    liftCoefficient: 1.5,
+    stallSpeed: 45,       // ~162 km/h
+    color: 0x4a4a4a,      // Dark gray
+    scale: 1.4,
+    type: 'su27'
   }
 };

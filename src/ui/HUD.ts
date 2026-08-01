@@ -17,9 +17,11 @@ export class HUD {
   private readonly R_ALTITUDE = 55;
 
   private _onMenuCallback: () => void;
+  private _gameMode: 'free_flight' | 'ring_mission' | 'combat' = 'free_flight';
 
-  constructor(onMenu: () => void) {
+  constructor(onMenu: () => void, gameMode: 'free_flight' | 'ring_mission' | 'combat' = 'free_flight') {
     this._onMenuCallback = onMenu;
+    this._gameMode = gameMode;
 
     // Overlay container (no background tint - cleaner look)
     this._overlay = document.createElement('div');
@@ -126,7 +128,9 @@ export class HUD {
     roll: number,
     onGround: boolean,
     crashed: boolean,
-    missionStatus?: { totalRings: number; ringsPassed: number; score: number; timeElapsed: number; completed: boolean }
+    missionStatus?: { totalRings: number; ringsPassed: number; score: number; timeElapsed: number; completed: boolean },
+    cameraMode?: string,
+    combatStatus?: { wave: number; score: number; playerHealth: number; maxPlayerHealth: number; enemiesAlive: number; totalEnemies: number }
   ) {
     if (!this._visible) return;
 
@@ -145,13 +149,27 @@ export class HUD {
     this.drawStatus(onGround, crashed);
     this.drawInfoPanel(heading, throttle, verticalSpeed);
 
+    // Draw camera mode indicator
+    if (cameraMode) {
+      this.drawCameraMode(cameraMode);
+    }
+
     // Draw mission status if provided
     if (missionStatus) {
       this.drawMissionStatus(missionStatus);
     }
 
+    // Draw combat status if provided
+    if (combatStatus) {
+      this.drawCombatStatus(combatStatus);
+    }
+
     // Draw controls reference (minimal, bottom center)
     this.drawControlsReference();
+  }
+
+  setGameMode(mode: 'free_flight' | 'ring_mission' | 'combat'): void {
+    this._gameMode = mode;
   }
 
   // --- Drawing helpers ---
@@ -704,5 +722,109 @@ export class HUD {
   show() {
     this._visible = true;
     this._overlay.style.display = 'block';
+  }
+
+  private drawCameraMode(mode: string): void {
+    const ctx = this._ctx;
+    const w = window.innerWidth;
+    const x = w / 2 - 60;
+    const y = 10;
+    const panelW = 120;
+    const panelH = 28;
+
+    // Panel background
+    ctx.fillStyle = 'rgba(10, 10, 30, 0.65)';
+    ctx.beginPath();
+    ctx.roundRect(x, y, panelW, panelH, 6);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(100, 200, 255, 0.3)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Mode label
+    const modeLabels: Record<string, string> = {
+      chase: 'CHASE CAM',
+      cockpit: 'COCKPIT',
+      cinematic: 'CINEMATIC',
+      tower: 'TOWER'
+    };
+
+    ctx.fillStyle = '#00ccff';
+    ctx.font = 'bold 11px Segoe UI, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(modeLabels[mode] || mode.toUpperCase(), x + panelW / 2, y + 18);
+  }
+
+  private drawCombatStatus(combat: { wave: number; score: number; playerHealth: number; maxPlayerHealth: number; enemiesAlive: number; totalEnemies: number }): void {
+    const ctx = this._ctx;
+    const w = window.innerWidth;
+    const x = w - 220;
+    const y = 180;
+    const panelW = 190;
+    const panelH = 120;
+
+    // Panel background
+    ctx.fillStyle = 'rgba(30, 10, 10, 0.75)';
+    ctx.beginPath();
+    ctx.roundRect(x, y, panelW, panelH, 8);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 100, 100, 0.4)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Wave
+    ctx.fillStyle = '#ff6644';
+    ctx.font = 'bold 12px Segoe UI, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(`WAVE ${combat.wave}`, x + 14, y + 22);
+
+    // Score
+    ctx.fillStyle = '#88aacc';
+    ctx.font = '11px Segoe UI, sans-serif';
+    ctx.fillText('SCORE', x + 14, y + 42);
+    ctx.fillStyle = '#ffcc00';
+    ctx.font = 'bold 14px Segoe UI, sans-serif';
+    ctx.fillText(`${combat.score}`, x + 70, y + 42);
+
+    // Health bar
+    ctx.fillStyle = '#88aacc';
+    ctx.font = '11px Segoe UI, sans-serif';
+    ctx.fillText('HP', x + 14, y + 64);
+
+    const barX = x + 40;
+    const barY = y + 54;
+    const barW = panelW - 60;
+    const barH = 12;
+    ctx.fillStyle = 'rgba(255,255,255,0.1)';
+    ctx.fillRect(barX, barY, barW, barH);
+    
+    const healthPercent = combat.playerHealth / combat.maxPlayerHealth;
+    const hpW = healthPercent * barW;
+    const hpColor = healthPercent > 0.6 ? '#00cc44' : healthPercent > 0.3 ? '#ffcc00' : '#ff4444';
+    ctx.fillStyle = hpColor;
+    ctx.fillRect(barX, barY, hpW, barH);
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(barX, barY, barW, barH);
+
+    // Health text
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 10px Segoe UI, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(`${Math.round(combat.playerHealth)}/${combat.maxPlayerHealth}`, x + panelW - 12, y + 64);
+    ctx.textAlign = 'left';
+
+    // Enemies
+    ctx.fillStyle = '#88aacc';
+    ctx.font = '11px Segoe UI, sans-serif';
+    ctx.fillText('ENEMIES', x + 14, y + 90);
+    ctx.fillStyle = '#ff4444';
+    ctx.font = 'bold 14px Segoe UI, sans-serif';
+    ctx.fillText(`${combat.enemiesAlive} / ${combat.totalEnemies}`, x + 70, y + 90);
+
+    // Target reticle
+    ctx.strokeStyle = 'rgba(255, 100, 100, 0.3)';
+    ctx.font = '10px Segoe UI, sans-serif';
+    ctx.fillText('⊕ TARGET', x + 14, y + 110);
   }
 }

@@ -53,6 +53,7 @@ export class Atmosphere {
 
     updateSkyPosition(camPos: THREE.Vector3): void { this._sky.position.copy(camPos); }
     setDensity(d: number): void { this._fog.density = d; }
+    setFogDensity(d: number): void { this._fog.density = d; }
     dispose(scene: THREE.Scene): void {
         scene.remove(this._sky);
         this._sky.geometry.dispose();
