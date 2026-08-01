@@ -202,10 +202,10 @@ export class HUD {
     // Clear canvas
     this._ctx.clearRect(0, 0, w, h);
 
-    // Draw main instruments with smoothed values
-    this.drawAirspeed(this._smoothSpeed * 3.6); // m/s to km/h
-    this.drawAltimeter(Math.max(0, this._smoothAltitude));
-    this.drawAttitude(this._smoothPitch, this._smoothRoll);
+    // Draw minimal digital instruments
+    this.drawDigitalSpeed(this._smoothSpeed * 3.6);
+    this.drawDigitalAltitude(Math.max(0, this._smoothAltitude));
+    this.drawMiniAttitude(this._smoothPitch, this._smoothRoll);
 
     // Draw info panels
     this.drawStatus(onGround, crashed);
@@ -319,181 +319,117 @@ export class HUD {
     ctx.stroke();
   }
 
-  // --- Instruments ---
-
-  private drawAirspeed(speedKmh: number) {
-    const { x, y } = this._airspeedPos;
-    const r = this.R_AIRSPEED;
-
-    this.drawGaugeBackground(x, y, r);
-
-    // Scale: 0-400 km/h, arc from 135° to 405° (270° sweep)
-    const startAngle = Math.PI * 0.75; // 135°
-    const sweepAngle = Math.PI * 1.5; // 270°
-    const maxSpeed = 400;
-
-    // Tick marks and numbers
+  // --- Digital Speed Display (bottom-left) ---
+  private drawDigitalSpeed(speedKmh: number) {
     const ctx = this._ctx;
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '11px Arial, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
+    const w = window.innerWidth;
+    const x = 20;
+    const y = w * 0.6 + 60;
+    const panelW = 160;
+    const panelH = 80;
 
-    for (let s = 0; s <= maxSpeed; s += 50) {
-      const angle = startAngle + (s / maxSpeed) * sweepAngle;
-      const outerR = r - 8;
-      const innerR = r - 18;
-
-      // Major tick
-      ctx.beginPath();
-      ctx.moveTo(x + Math.cos(angle) * outerR, y + Math.sin(angle) * outerR);
-      ctx.lineTo(x + Math.cos(angle) * innerR, y + Math.sin(angle) * innerR);
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-
-      // Minor ticks
-      for (let m = 1; m < 5; m++) {
-        const minorAngle = startAngle + ((s + m * 10) / maxSpeed) * sweepAngle;
-        const minorInnerR = r - 13;
-        ctx.beginPath();
-        ctx.moveTo(x + Math.cos(minorAngle) * outerR, y + Math.sin(minorAngle) * outerR);
-        ctx.lineTo(x + Math.cos(minorAngle) * minorInnerR, y + Math.sin(minorAngle) * minorInnerR);
-        ctx.strokeStyle = '#aaaaaa';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-      }
-
-      // Number
-      const textR = r - 28;
-      ctx.fillText(s.toString(), x + Math.cos(angle) * textR, y + Math.sin(angle) * textR);
-    }
-
-    // Color arcs
-    // Green: 100-300 km/h
-    const greenStart = startAngle + (100 / maxSpeed) * sweepAngle;
-    const greenEnd = startAngle + (300 / maxSpeed) * sweepAngle;
-    this.drawArcSegment(x, y, r - 4, greenStart, greenEnd, '#00cc00', 4);
-
-    // Yellow: 300-350 km/h
-    const yellowStart = greenEnd;
-    const yellowEnd = startAngle + (350 / maxSpeed) * sweepAngle;
-    this.drawArcSegment(x, y, r - 4, yellowStart, yellowEnd, '#ffcc00', 4);
-
-    // Red: 350+ km/h
-    const redStart = yellowEnd;
-    const redEnd = startAngle + sweepAngle;
-    this.drawArcSegment(x, y, r - 4, redStart, redEnd, '#ff0000', 4);
-
-    // Needle
-    const clampedSpeed = Math.max(0, Math.min(maxSpeed, speedKmh));
-    const needleAngle = startAngle + (clampedSpeed / maxSpeed) * sweepAngle;
-    this.drawNeedle(x, y, needleAngle, r - 20, 3);
+    // Background
+    const panelGrad = ctx.createLinearGradient(x, y, x, y + panelH);
+    panelGrad.addColorStop(0, 'rgba(8, 12, 24, 0.88)');
+    panelGrad.addColorStop(1, 'rgba(8, 12, 24, 0.75)');
+    ctx.fillStyle = panelGrad;
+    ctx.beginPath();
+    ctx.roundRect(x, y, panelW, panelH, 8);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(80, 160, 220, 0.3)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
 
     // Label
-    ctx.fillStyle = '#cccccc';
-    ctx.font = 'bold 11px Arial, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('KM/H', x, y + r - 42);
+    ctx.fillStyle = '#6688aa';
+    ctx.font = '10px Segoe UI, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('SPEED', x + 14, y + 22);
 
-    // Digital readout at bottom
-    ctx.fillStyle = '#111111';
-    ctx.fillRect(x - 25, y + r - 35, 50, 18);
-    ctx.strokeStyle = '#555555';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(x - 25, y + r - 35, 50, 18);
-    ctx.fillStyle = '#00ff00';
-    ctx.font = '12px Courier New, monospace';
-    ctx.fillText(Math.round(clampedSpeed).toString(), x, y + r - 23);
+    // Value
+    const speedColor = speedKmh > 350 ? '#ff4444' : speedKmh > 300 ? '#ffcc00' : '#00ff00';
+    ctx.fillStyle = speedColor;
+    ctx.font = 'bold 32px Segoe UI, sans-serif';
+    ctx.fillText(Math.round(speedKmh).toString().padStart(3, ' '), x + 14, y + 58);
+
+    // Unit
+    ctx.fillStyle = '#6688aa';
+    ctx.font = '12px Segoe UI, sans-serif';
+    ctx.fillText('km/h', x + 110, y + 58);
   }
 
-  private drawAltimeter(altitude: number) {
-    const { x, y } = this._altimeterPos;
-    const r = this.R_ALTITUDE;
-
-    this.drawGaugeBackground(x, y, r);
-
+  // --- Digital Altitude Display (bottom-right) ---
+  private drawDigitalAltitude(altitude: number) {
     const ctx = this._ctx;
-    const maxAlt = 5000;
+    const w = window.innerWidth;
+    const x = w - 180;
+    const y = w * 0.6 + 60;
+    const panelW = 160;
+    const panelH = 80;
 
-    // Scale: 0-5000m, arc from 135° to 405° (270° sweep)
-    const startAngle = Math.PI * 0.75;
-    const sweepAngle = Math.PI * 1.5;
-
-    // Tick marks and numbers
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '10px Arial, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    for (let a = 0; a <= maxAlt; a += 500) {
-      const angle = startAngle + (a / maxAlt) * sweepAngle;
-      const outerR = r - 8;
-      const innerR = r - 16;
-
-      // Major tick
-      ctx.beginPath();
-      ctx.moveTo(x + Math.cos(angle) * outerR, y + Math.sin(angle) * outerR);
-      ctx.lineTo(x + Math.cos(angle) * innerR, y + Math.sin(angle) * innerR);
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-
-      // Number
-      const textR = r - 24;
-      ctx.fillText((a / 1000).toFixed(1), x + Math.cos(angle) * textR, y + Math.sin(angle) * textR);
-    }
-
-    // Needle for 100m increments (long needle)
-    const clampedAlt = Math.max(0, Math.min(maxAlt, altitude));
-    const needleAngle = startAngle + (clampedAlt / maxAlt) * sweepAngle;
-    this.drawNeedle(x, y, needleAngle, r - 18, 2);
+    // Background
+    const panelGrad = ctx.createLinearGradient(x, y, x, y + panelH);
+    panelGrad.addColorStop(0, 'rgba(8, 12, 24, 0.88)');
+    panelGrad.addColorStop(1, 'rgba(8, 12, 24, 0.75)');
+    ctx.fillStyle = panelGrad;
+    ctx.beginPath();
+    ctx.roundRect(x, y, panelW, panelH, 8);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(80, 160, 220, 0.3)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
 
     // Label
-    ctx.fillStyle = '#cccccc';
-    ctx.font = 'bold 11px Arial, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('ALT', x, y - r + 42);
+    ctx.fillStyle = '#6688aa';
+    ctx.font = '10px Segoe UI, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('ALTITUDE', x + 14, y + 22);
 
-    // Digital readout
-    ctx.fillStyle = '#111111';
-    ctx.fillRect(x - 25, y + r - 35, 50, 18);
-    ctx.strokeStyle = '#555555';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(x - 25, y + r - 35, 50, 18);
-    ctx.fillStyle = '#00ff00';
-    ctx.font = '12px Courier New, monospace';
-    ctx.fillText(Math.round(clampedAlt).toString(), x, y + r - 23);
+    // Value
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 32px Segoe UI, sans-serif';
+    ctx.fillText(Math.round(altitude).toString().padStart(4, ' '), x + 14, y + 58);
+
+    // Unit
+    ctx.fillStyle = '#6688aa';
+    ctx.font = '12px Segoe UI, sans-serif';
+    ctx.fillText('m', x + 130, y + 58);
   }
 
-  // --- Attitude indicator (center instrument) ---
-  private drawAttitude(pitch: number, roll: number) {
-    const { x, y } = this._attitudePos;
-    const r = this.R_ATTITUDE;
-
-    this.drawGaugeBackground(x, y, r);
-
+  // --- Mini Attitude Indicator (bottom-center) ---
+  private drawMiniAttitude(pitch: number, roll: number) {
     const ctx = this._ctx;
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const x = w / 2;
+    const y = h - 80;
+    const r = 50;
 
-    // Clip to circle
+    // Background circle
     ctx.save();
     ctx.beginPath();
-    ctx.arc(x, y, r - 2, 0, Math.PI * 2);
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(8, 12, 24, 0.85)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(80, 160, 220, 0.3)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Clip to circle
     ctx.clip();
 
     // Apply roll rotation
     ctx.translate(x, y);
     ctx.rotate(roll);
 
-    // Pitch offset (pixels per radian)
-    const pitchScale = r * 0.8;
-    const pitchOffset = pitch * pitchScale;
+    // Pitch offset
+    const pitchOffset = pitch * 40;
 
-    // Sky (top half) - blue
-    ctx.fillStyle = '#2266aa';
+    // Sky
+    ctx.fillStyle = '#1a5599';
     ctx.fillRect(-r, -r + pitchOffset, r * 2, r);
 
-    // Ground (bottom half) - brown
+    // Ground
     ctx.fillStyle = '#664422';
     ctx.fillRect(-r, pitchOffset, r * 2, r);
 
@@ -505,87 +441,48 @@ export class HUD {
     ctx.lineTo(r, pitchOffset);
     ctx.stroke();
 
-    // Pitch ladder lines
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 1;
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '9px Arial, sans-serif';
-    ctx.textAlign = 'center';
-
-    for (const deg of [-30, -20, -10, 10, 20, 30]) {
-      const lineY = pitchOffset - (deg * Math.PI / 180) * pitchScale;
-      const lineWidth = deg % 20 === 0 ? 40 : 25;
-
-      // Horizontal line
-      ctx.beginPath();
-      ctx.moveTo(-lineWidth, lineY);
-      ctx.lineTo(lineWidth, lineY);
-      ctx.stroke();
-
-      // Small wings for non-zero
-      if (deg !== 0) {
-        ctx.beginPath();
-        ctx.moveTo(-lineWidth, lineY);
-        ctx.lineTo(-lineWidth + 5, lineY - (deg > 0 ? -3 : 3));
-        ctx.lineTo(lineWidth - 5, lineY - (deg > 0 ? -3 : 3));
-        ctx.lineTo(lineWidth, lineY);
-        ctx.fillStyle = deg > 0 ? '#ffffff' : '#cccccc';
-        ctx.fill();
-
-        // Label
-        ctx.fillText(deg.toString(), lineWidth + 12, lineY + 3);
-      }
-    }
-
     ctx.restore();
 
-    // Fixed aircraft reference symbol (center)
+    // Aircraft reference
     ctx.strokeStyle = '#ffcc00';
-    ctx.lineWidth = 3;
-
-    // Horizontal wing line
+    ctx.lineWidth = 2.5;
     ctx.beginPath();
-    ctx.moveTo(x - 35, y);
-    ctx.lineTo(x - 8, y);
+    ctx.moveTo(x - 40, y);
+    ctx.lineTo(x - 10, y);
     ctx.stroke();
-
     ctx.beginPath();
-    ctx.moveTo(x + 8, y);
-    ctx.lineTo(x + 35, y);
+    ctx.moveTo(x + 10, y);
+    ctx.lineTo(x + 40, y);
     ctx.stroke();
-
-    // Center dot
     ctx.beginPath();
     ctx.arc(x, y, 3, 0, Math.PI * 2);
     ctx.fillStyle = '#ffcc00';
     ctx.fill();
 
-    // Roll indicator arc at top
+    // Roll indicator at top
     ctx.save();
     ctx.beginPath();
-    ctx.arc(x, y, r - 2, 0, Math.PI * 2);
+    ctx.arc(x, y, r - 1, 0, Math.PI * 2);
     ctx.clip();
 
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(x, y - r + 12);
-    ctx.lineTo(x - 8, y - r + 20);
-    ctx.lineTo(x + 8, y - r + 20);
-    ctx.closePath();
     ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.moveTo(x, y - r + 8);
+    ctx.lineTo(x - 5, y - r + 14);
+    ctx.lineTo(x + 5, y - r + 14);
+    ctx.closePath();
     ctx.fill();
 
-    // Roll scale marks
-    for (const deg of [-60, -45, -30, -20, 0, 20, 30, 45, 60]) {
+    // Roll marks
+    for (const deg of [-30, 0, 30]) {
       const angle = -Math.PI / 2 + (deg * Math.PI / 180);
-      const outerR = r - 6;
-      const innerR = r - 12;
+      const outerR = r - 4;
+      const innerR = r - 9;
       ctx.beginPath();
       ctx.moveTo(x + Math.cos(angle) * outerR, y + Math.sin(angle) * outerR);
       ctx.lineTo(x + Math.cos(angle) * innerR, y + Math.sin(angle) * innerR);
       ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = deg === 0 ? 2 : 1;
+      ctx.lineWidth = deg === 0 ? 1.5 : 0.8;
       ctx.stroke();
     }
     ctx.restore();
