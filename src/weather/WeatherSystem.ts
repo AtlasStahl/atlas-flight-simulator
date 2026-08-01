@@ -167,48 +167,47 @@ export class WeatherSystem {
         if (this._config.cloudDensity <= 0) return;
         
         const layers = 3;
-        const cloudsPerLayer = Math.floor(this._config.cloudDensity * 50);
+        const cloudsPerLayer = Math.floor(this._config.cloudDensity * 80); // More clouds for better look
         
         for (let l = 0; l < layers; l++) {
             const group = new THREE.Group();
-            const altitude = 400 + l * 150;
+            const altitude = 300 + l * 100; // Lower altitude for better visibility
             
             const cloudMat = new THREE.MeshStandardMaterial({
                 color: 0xffffff,
                 transparent: true,
-                opacity: 0.4 + l * 0.15,
+                opacity: 0.5 + l * 0.1,
                 depthWrite: false
             });
             
             for (let i = 0; i < cloudsPerLayer; i++) {
-                // Each cloud is a cluster of spheres
+                // Each cloud is a cluster of spheres for fluffy look
                 const cloudGroup = new THREE.Group();
-                const numPuffs = 3 + Math.floor(Math.random() * 4);
+                const numPuffs = 4 + Math.floor(Math.random() * 5); // More puffs per cloud
                 
                 for (let p = 0; p < numPuffs; p++) {
-                    const size = 30 + Math.random() * 60;
-                    // More segments for round spheres (16x12 instead of 12x10)
-                    const geo = new THREE.SphereGeometry(size, 16, 12);
+                    const size = 20 + Math.random() * 40; // Smaller individual puffs
+                    // High segment count for perfectly round spheres
+                    const geo = new THREE.SphereGeometry(size, 20, 20);
                     const puff = new THREE.Mesh(geo, cloudMat);
                     
+                    // Position puffs closer together for a cohesive cloud
                     puff.position.set(
-                        (Math.random() - 0.5) * 80,
-                        Math.random() * 10,
-                        (Math.random() - 0.5) * 80
+                        (Math.random() - 0.5) * 40,
+                        (Math.random() - 0.5) * 15,
+                        (Math.random() - 0.5) * 40
                     );
-                    // Natural cloud puff scaling - slightly flattened but not disks!
-                    puff.scale.set(
-                        0.85 + Math.random() * 0.3,
-                        0.7 + Math.random() * 0.3,  // Slightly flattened (real clouds)
-                        0.85 + Math.random() * 0.3
-                    );
+                    // Equal scaling on all axes for round clouds
+                    const scale = 0.8 + Math.random() * 0.4;
+                    puff.scale.set(scale, scale, scale);
                     cloudGroup.add(puff);
                 }
                 
+                // Position clouds closer to the aircraft for better visibility
                 cloudGroup.position.set(
-                    (Math.random() - 0.5) * 15000,
-                    altitude + Math.random() * 50,
-                    (Math.random() - 0.5) * 15000
+                    (Math.random() - 0.5) * 8000,
+                    altitude + Math.random() * 30,
+                    (Math.random() - 0.5) * 8000
                 );
                 
                 group.add(cloudGroup);

@@ -348,7 +348,7 @@ export class Terrain {
   // ----------------------------------------------------------
   private createVegetation(scene: THREE.Scene): void {
     const trees = new RealisticTrees(
-      this._rawHeight.bind(this),
+      this.getHeight.bind(this),
       this._airportX,
       this._airportZ
     );
@@ -491,29 +491,35 @@ export class Terrain {
     const cloudMat = new THREE.MeshStandardMaterial({
       color: 0xffffff,
       transparent: true,
-      opacity: 0.8,
+      opacity: 0.5,
       roughness: 1,
       metalness: 0,
+      depthWrite: false, // Prevent z-fighting
     });
 
-    for (let i = 0; i < 60; i++) {
+    // Create clouds closer to the spawn area for better visibility
+    for (let i = 0; i < 30; i++) {
       const cloudGroup = new THREE.Group();
-      const numPuffs = 3 + Math.floor(Math.random() * 4);
+      const numPuffs = 5 + Math.floor(Math.random() * 6);
       for (let j = 0; j < numPuffs; j++) {
-        const radius = 20 + Math.random() * 40;
-        const puff = new THREE.Mesh(new THREE.SphereGeometry(radius, 8, 8), cloudMat);
+        const radius = 10 + Math.random() * 20;
+        // High segment count for perfectly round spheres
+        const puff = new THREE.Mesh(new THREE.SphereGeometry(radius, 24, 24), cloudMat);
         puff.position.set(
-          (Math.random() - 0.5) * 60,
+          (Math.random() - 0.5) * 30,
           (Math.random() - 0.5) * 15,
           (Math.random() - 0.5) * 30,
         );
-        puff.scale.y = 0.4;
+        // Equal scaling on all axes - no flattening!
+        const scale = 0.8 + Math.random() * 0.4;
+        puff.scale.set(scale, scale, scale);
         cloudGroup.add(puff);
       }
+      // Position clouds VERY close to spawn area (-600, 15, 0)
       cloudGroup.position.set(
-        (Math.random() - 0.5) * 8000,
-        50 + Math.random() * 300,
-        (Math.random() - 0.5) * 8000,
+        -600 + (Math.random() - 0.5) * 2000,  // Near runway
+        80 + Math.random() * 60,              // Just above aircraft eye level
+        (Math.random() - 0.5) * 2000,
       );
       this._clouds.add(cloudGroup);
     }

@@ -42,12 +42,19 @@ export class GroundCollision {
                        aircraft.position.z >= runwayBounds.z1 &&
                        aircraft.position.z <= runwayBounds.z2;
 
-      // Ground drag (much less friction for realistic taxi/takeoff roll)
+      // Ground drag - strong friction when no throttle, lighter drag when throttling
       const speed = aircraft.velocity.length();
       if (speed > 0.01) {
-        // Per-frame friction that's realistic: runway has low rolling resistance
-        const perFrameDrag = onRunway ? 0.999 : 0.995;
-        aircraft.velocity.multiplyScalar(perFrameDrag);
+        // Apply braking friction when no throttle is applied
+        if (aircraft.throttle < 0.05) {
+          // Strong braking to stop the aircraft
+          const brakeFactor = onRunway ? 0.96 : 0.92; // Much stronger friction
+          aircraft.velocity.multiplyScalar(brakeFactor);
+        } else {
+          // Light drag when throttle is applied (rolling resistance)
+          const perFrameDrag = onRunway ? 0.998 : 0.993;
+          aircraft.velocity.multiplyScalar(perFrameDrag);
+        }
       }
 
       // Zero vertical velocity

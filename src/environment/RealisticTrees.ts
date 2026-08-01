@@ -154,6 +154,16 @@ export class RealisticTrees {
       3
     );
     canopy1.material.vertexColors = true;
+    canopy2.instanceColor = new THREE.InstancedBufferAttribute(
+      canopyColors.slice(0, idx * 3),
+      3
+    );
+    canopy2.material.vertexColors = true;
+    canopy3.instanceColor = new THREE.InstancedBufferAttribute(
+      canopyColors.slice(0, idx * 3),
+      3
+    );
+    canopy3.material.vertexColors = true;
 
     // Set actual counts
     trunks.count = idx;
@@ -192,7 +202,6 @@ export class RealisticTrees {
       color: 0x5c3a1e,
       roughness: 0.9,
       metalness: 0.0,
-      vertexColors: true,
     });
 
     // Canopy: sphere geometry for organic overlapping clusters
@@ -201,7 +210,6 @@ export class RealisticTrees {
       color: 0x3a8c3f,
       roughness: 0.9,
       metalness: 0.0,
-      vertexColors: true,
     });
 
     // 4 sphere instances per tree for organic canopy shape
@@ -280,13 +288,11 @@ export class RealisticTrees {
       idx++;
     }
 
-    // Apply instance colors
-    trunkMesh.instanceColor = new THREE.InstancedBufferAttribute(trunkColors, 3);
-    canopyMesh.instanceColor = new THREE.InstancedBufferAttribute(canopyColors, 3);
-
-    // Set actual counts
+    // Set actual counts FIRST
     trunkMesh.count = idx;
     canopyMesh.count = idx * spheresPerTree;
+
+    // No instanceColor needed - material color is used directly
 
     // Enable shadows
     trunkMesh.castShadow = true;
@@ -316,7 +322,6 @@ export class RealisticTrees {
       color: 0x2d6b2d,
       roughness: 0.9,
       metalness: 0.0,
-      vertexColors: true,
     });
 
     const bush1 = new THREE.InstancedMesh(bush1Geo, bushMat, maxCount);
@@ -368,21 +373,12 @@ export class RealisticTrees {
       idx++;
     }
 
-    // Apply instance colors
-    bush1.instanceColor = new THREE.InstancedBufferAttribute(colors, 3);
-    bush2.instanceColor = new THREE.InstancedBufferAttribute(
-      colors.slice(0, idx * 3),
-      3
-    );
-    bush3.instanceColor = new THREE.InstancedBufferAttribute(
-      colors.slice(0, idx * 3),
-      3
-    );
-
-    // Set actual counts
+    // Set actual counts FIRST
     bush1.count = idx;
     bush2.count = idx;
     bush3.count = idx;
+
+    // No instanceColor needed - material color is used directly
 
     bush1.castShadow = true;
     bush2.castShadow = true;
