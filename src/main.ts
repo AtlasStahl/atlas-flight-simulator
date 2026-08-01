@@ -172,6 +172,7 @@ function startGame(config: AircraftConfig, weather: string, gameMode: GameMode) 
   } else {
     hud.setGameMode(gameMode);
   }
+  hud.setAircraftType(config.type);
   hud.show();
 
   // Connect camera button to camera cycling
