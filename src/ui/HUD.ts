@@ -7,6 +7,16 @@ export class HUD {
   private _cameraBtn: HTMLButtonElement;
   private _visible: boolean = true;
 
+  // Smoothed values to prevent jitter
+  private _smoothSpeed = 0;
+  private _smoothAltitude = 0;
+  private _smoothHeading = 0;
+  private _smoothThrottle = 0;
+  private _smoothVerticalSpeed = 0;
+  private _smoothPitch = 0;
+  private _smoothRoll = 0;
+  private readonly SMOOTH = 0.12; // smoothing factor
+
   // Instrument positions (relative to canvas)
   private _airspeedPos = { x: 0, y: 0 };
   private _attitudePos = { x: 0, y: 0 };
@@ -58,26 +68,26 @@ export class HUD {
       right: 16px;
       z-index: 200;
       pointer-events: auto;
-      padding: 10px 24px;
-      font-size: 14px;
-      font-weight: bold;
+      padding: 8px 18px;
+      font-size: 12px;
+      font-weight: 600;
       font-family: 'Segoe UI', Tahoma, sans-serif;
-      letter-spacing: 1px;
-      background: rgba(10, 10, 30, 0.75);
+      letter-spacing: 0.5px;
+      background: rgba(8, 12, 24, 0.85);
       color: #ffffff;
-      border: 1px solid rgba(255,255,255,0.25);
-      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 6px;
       cursor: pointer;
-      backdrop-filter: blur(8px);
-      transition: all 0.2s ease;
+      backdrop-filter: blur(10px);
+      transition: all 0.15s ease;
     `;
     this._menuBtn.addEventListener('mouseenter', () => {
-      this._menuBtn.style.background = 'rgba(0, 150, 255, 0.6)';
-      this._menuBtn.style.borderColor = 'rgba(100, 200, 255, 0.8)';
+      this._menuBtn.style.background = 'rgba(0, 120, 200, 0.7)';
+      this._menuBtn.style.borderColor = 'rgba(100, 200, 255, 0.6)';
     });
     this._menuBtn.addEventListener('mouseleave', () => {
-      this._menuBtn.style.background = 'rgba(10, 10, 30, 0.75)';
-      this._menuBtn.style.borderColor = 'rgba(255,255,255,0.25)';
+      this._menuBtn.style.background = 'rgba(8, 12, 24, 0.85)';
+      this._menuBtn.style.borderColor = 'rgba(255,255,255,0.15)';
     });
     this._menuBtn.addEventListener('click', () => {
       this._onMenuCallback();
@@ -94,26 +104,26 @@ export class HUD {
       transform: translateX(-50%);
       z-index: 200;
       pointer-events: auto;
-      padding: 10px 24px;
-      font-size: 14px;
-      font-weight: bold;
+      padding: 8px 18px;
+      font-size: 12px;
+      font-weight: 600;
       font-family: 'Segoe UI', Tahoma, sans-serif;
-      letter-spacing: 1px;
-      background: rgba(10, 10, 30, 0.75);
+      letter-spacing: 0.5px;
+      background: rgba(8, 12, 24, 0.85);
       color: #00ccff;
-      border: 1px solid rgba(0, 204, 255, 0.4);
-      border-radius: 8px;
+      border: 1px solid rgba(0, 204, 255, 0.3);
+      border-radius: 6px;
       cursor: pointer;
-      backdrop-filter: blur(8px);
-      transition: all 0.2s ease;
+      backdrop-filter: blur(10px);
+      transition: all 0.15s ease;
     `;
     this._cameraBtn.addEventListener('mouseenter', () => {
-      this._cameraBtn.style.background = 'rgba(0, 150, 255, 0.6)';
-      this._cameraBtn.style.borderColor = 'rgba(100, 200, 255, 0.8)';
+      this._cameraBtn.style.background = 'rgba(0, 120, 200, 0.7)';
+      this._cameraBtn.style.borderColor = 'rgba(100, 200, 255, 0.6)';
     });
     this._cameraBtn.addEventListener('mouseleave', () => {
-      this._cameraBtn.style.background = 'rgba(10, 10, 30, 0.75)';
-      this._cameraBtn.style.borderColor = 'rgba(0, 204, 255, 0.4)';
+      this._cameraBtn.style.background = 'rgba(8, 12, 24, 0.85)';
+      this._cameraBtn.style.borderColor = 'rgba(0, 204, 255, 0.3)';
     });
     this._cameraBtn.addEventListener('click', () => {
       this._onCameraCallback?.();
@@ -156,6 +166,11 @@ export class HUD {
     this._altimeterPos.y = panelY;
   }
 
+  // Linear interpolation for smoothing
+  private lerp(current: number, target: number): number {
+    return current + (target - current) * this.SMOOTH;
+  }
+
   update(
     speed: number,
     altitude: number,
@@ -172,20 +187,29 @@ export class HUD {
   ) {
     if (!this._visible) return;
 
+    // Smooth values to prevent jitter
+    this._smoothSpeed = this.lerp(this._smoothSpeed, speed);
+    this._smoothAltitude = this.lerp(this._smoothAltitude, altitude);
+    this._smoothHeading = this.lerp(this._smoothHeading, heading);
+    this._smoothThrottle = this.lerp(this._smoothThrottle, throttle);
+    this._smoothVerticalSpeed = this.lerp(this._smoothVerticalSpeed, verticalSpeed);
+    this._smoothPitch = this.lerp(this._smoothPitch, pitch);
+    this._smoothRoll = this.lerp(this._smoothRoll, roll);
+
     const w = window.innerWidth;
     const h = window.innerHeight;
 
     // Clear canvas
     this._ctx.clearRect(0, 0, w, h);
 
-    // Draw main instruments
-    this.drawAirspeed(speed * 3.6); // m/s to km/h
-    this.drawAltimeter(Math.max(0, altitude));
-    this.drawAttitude(pitch, roll);
+    // Draw main instruments with smoothed values
+    this.drawAirspeed(this._smoothSpeed * 3.6); // m/s to km/h
+    this.drawAltimeter(Math.max(0, this._smoothAltitude));
+    this.drawAttitude(this._smoothPitch, this._smoothRoll);
 
-    // Draw info panels (top-left: status + mission, top-right: heading/throttle/vsi)
+    // Draw info panels
     this.drawStatus(onGround, crashed);
-    this.drawInfoPanel(heading, throttle, verticalSpeed);
+    this.drawInfoPanel(this._smoothHeading, this._smoothThrottle, this._smoothVerticalSpeed);
 
     // Draw camera mode indicator
     if (cameraMode) {
@@ -571,86 +595,109 @@ export class HUD {
   private drawInfoPanel(heading: number, throttle: number, verticalSpeed: number) {
     const ctx = this._ctx;
     const w = window.innerWidth;
-    const x = w - 200;
+    const x = w - 195;
     const y = 60;
-    const panelW = 170;
-    const panelH = 110;
+    const panelW = 175;
+    const panelH = 115;
 
-    // Panel background
-    ctx.fillStyle = 'rgba(10, 10, 30, 0.65)';
+    // Panel background with gradient
+    const panelGrad = ctx.createLinearGradient(x, y, x, y + panelH);
+    panelGrad.addColorStop(0, 'rgba(8, 12, 24, 0.88)');
+    panelGrad.addColorStop(1, 'rgba(8, 12, 24, 0.75)');
+    ctx.fillStyle = panelGrad;
     ctx.beginPath();
     ctx.roundRect(x, y, panelW, panelH, 8);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(100, 200, 255, 0.3)';
+    ctx.strokeStyle = 'rgba(80, 160, 220, 0.3)';
     ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Separator line
+    ctx.strokeStyle = 'rgba(80, 160, 220, 0.15)';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(x + 12, y + 38);
+    ctx.lineTo(x + panelW - 12, y + 38);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x + 12, y + 72);
+    ctx.lineTo(x + panelW - 12, y + 72);
     ctx.stroke();
 
     // Heading
     const headingDeg = (((heading * 180 / Math.PI) % 360) + 360) % 360;
-    ctx.fillStyle = '#88aacc';
-    ctx.font = '11px Segoe UI, sans-serif';
+    ctx.fillStyle = '#6688aa';
+    ctx.font = '10px Segoe UI, sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText('HDG', x + 12, y + 22);
+    ctx.fillText('HEADING', x + 12, y + 24);
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 14px Segoe UI, sans-serif';
-    ctx.fillText(`${Math.round(headingDeg).toString().padStart(3, ' ')}°`, x + 60, y + 22);
+    ctx.font = 'bold 16px Segoe UI, sans-serif';
+    ctx.fillText(`${Math.round(headingDeg).toString().padStart(3, ' ')}°`, x + 80, y + 24);
 
     // Throttle bar
-    ctx.fillStyle = '#88aacc';
-    ctx.font = '11px Segoe UI, sans-serif';
-    ctx.fillText('THR', x + 12, y + 48);
+    ctx.fillStyle = '#6688aa';
+    ctx.font = '10px Segoe UI, sans-serif';
+    ctx.fillText('THROTTLE', x + 12, y + 56);
 
-    const barX = x + 60;
-    const barY = y + 38;
-    const barW = panelW - 80;
-    const barH = 12;
-    ctx.fillStyle = 'rgba(255,255,255,0.1)';
-    ctx.fillRect(barX, barY, barW, barH);
+    const barX = x + 80;
+    const barY = y + 46;
+    const barW = panelW - 95;
+    const barH = 14;
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    ctx.beginPath();
+    ctx.roundRect(barX, barY, barW, barH, 3);
+    ctx.fill();
     const thrW = throttle * barW;
-    const thrGrad = ctx.createLinearGradient(barX, 0, barX + barW, 0);
-    thrGrad.addColorStop(0, '#00cc44');
-    thrGrad.addColorStop(0.7, '#ffcc00');
-    thrGrad.addColorStop(1, '#ff4400');
-    ctx.fillStyle = thrGrad;
-    ctx.fillRect(barX, barY, thrW, barH);
-    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(barX, barY, barW, barH);
+    if (thrW > 0) {
+      const thrGrad = ctx.createLinearGradient(barX, 0, barX + barW, 0);
+      thrGrad.addColorStop(0, '#00cc44');
+      thrGrad.addColorStop(0.7, '#ffcc00');
+      thrGrad.addColorStop(1, '#ff4400');
+      ctx.fillStyle = thrGrad;
+      ctx.beginPath();
+      ctx.roundRect(barX, barY, thrW, barH, 3);
+      ctx.fill();
+    }
+    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    ctx.roundRect(barX, barY, barW, barH, 3);
+    ctx.stroke();
 
     // Throttle %
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 11px Segoe UI, sans-serif';
+    ctx.font = 'bold 12px Segoe UI, sans-serif';
     ctx.textAlign = 'right';
-    ctx.fillText(`${Math.round(throttle * 100)}%`, x + panelW - 12, y + 48);
+    ctx.fillText(`${Math.round(throttle * 100)}%`, x + panelW - 12, y + 56);
     ctx.textAlign = 'left';
 
     // VSI
-    ctx.fillStyle = '#88aacc';
-    ctx.font = '11px Segoe UI, sans-serif';
-    ctx.fillText('V/S', x + 12, y + 78);
+    ctx.fillStyle = '#6688aa';
+    ctx.font = '10px Segoe UI, sans-serif';
+    ctx.fillText('VERT. SPEED', x + 12, y + 90);
     const vsiColor = verticalSpeed > 0.5 ? '#00cc44' : verticalSpeed < -0.5 ? '#ff6644' : '#ffffff';
     ctx.fillStyle = vsiColor;
-    ctx.font = 'bold 14px Segoe UI, sans-serif';
+    ctx.font = 'bold 16px Segoe UI, sans-serif';
     const vsiSign = verticalSpeed >= 0 ? '+' : '';
-    ctx.fillText(`${vsiSign}${verticalSpeed.toFixed(1)} m/s`, x + 60, y + 78);
+    ctx.fillText(`${vsiSign}${verticalSpeed.toFixed(1)} m/s`, x + 80, y + 90);
 
     // Small arrow
     ctx.fillStyle = vsiColor;
     ctx.beginPath();
     if (verticalSpeed > 0.5) {
       // Up arrow
-      ctx.moveTo(x + panelW - 20, y + 68);
-      ctx.lineTo(x + panelW - 14, y + 78);
-      ctx.lineTo(x + panelW - 26, y + 78);
+      ctx.moveTo(x + panelW - 20, y + 80);
+      ctx.lineTo(x + panelW - 14, y + 90);
+      ctx.lineTo(x + panelW - 26, y + 90);
     } else if (verticalSpeed < -0.5) {
       // Down arrow
-      ctx.moveTo(x + panelW - 20, y + 82);
-      ctx.lineTo(x + panelW - 14, y + 72);
-      ctx.lineTo(x + panelW - 26, y + 72);
+      ctx.moveTo(x + panelW - 20, y + 94);
+      ctx.lineTo(x + panelW - 14, y + 84);
+      ctx.lineTo(x + panelW - 26, y + 84);
     } else {
       // Horizontal line
-      ctx.moveTo(x + panelW - 26, y + 75);
-      ctx.lineTo(x + panelW - 14, y + 75);
+      ctx.moveTo(x + panelW - 26, y + 87);
+      ctx.lineTo(x + panelW - 14, y + 87);
       ctx.lineWidth = 2;
       ctx.stroke();
       return;
@@ -665,12 +712,15 @@ export class HUD {
     const x = 16;
     const y = 60;
 
-    // Background panel
-    ctx.fillStyle = 'rgba(10, 10, 30, 0.65)';
+    // Background panel with gradient
+    const panelGrad = ctx.createLinearGradient(x, y, x, y + 50);
+    panelGrad.addColorStop(0, 'rgba(8, 12, 24, 0.88)');
+    panelGrad.addColorStop(1, 'rgba(8, 12, 24, 0.75)');
+    ctx.fillStyle = panelGrad;
     ctx.beginPath();
-    ctx.roundRect(x, y, 140, 44, 8);
+    ctx.roundRect(x, y, 150, 50, 8);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(100, 200, 255, 0.3)';
+    ctx.strokeStyle = 'rgba(80, 160, 220, 0.3)';
     ctx.lineWidth = 1;
     ctx.stroke();
 
@@ -688,16 +738,20 @@ export class HUD {
       textColor = '#00cc44';
     }
 
-    // Dot indicator
+    // Dot indicator with glow
+    ctx.save();
+    ctx.shadowColor = textColor;
+    ctx.shadowBlur = 8;
     ctx.beginPath();
-    ctx.arc(x + 16, y + 22, 5, 0, Math.PI * 2);
+    ctx.arc(x + 18, y + 25, 5, 0, Math.PI * 2);
     ctx.fillStyle = textColor;
     ctx.fill();
+    ctx.restore();
 
     ctx.fillStyle = textColor;
-    ctx.font = 'bold 13px Segoe UI, sans-serif';
+    ctx.font = 'bold 14px Segoe UI, sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText(statusText, x + 28, y + 26);
+    ctx.fillText(statusText, x + 30, y + 29);
 
     // Sub-text based on game mode
     let subText: string;
@@ -719,9 +773,9 @@ export class HUD {
       }
     }
 
-    ctx.fillStyle = '#6688aa';
+    ctx.fillStyle = '#5577aa';
     ctx.font = '10px Segoe UI, sans-serif';
-    ctx.fillText(subText, x + 16, y + 40);
+    ctx.fillText(subText, x + 16, y + 44);
   }
 
   private drawControlsReference() {
@@ -742,41 +796,44 @@ export class HUD {
   private drawMissionStatus(missionStatus: { totalRings: number; ringsPassed: number; score: number; timeElapsed: number; completed: boolean }) {
     const ctx = this._ctx;
     const x = 16;
-    const y = 112;
-    const panelW = 140;
-    const panelH = missionStatus.completed ? 70 : 44;
+    const y = 118;
+    const panelW = 150;
+    const panelH = missionStatus.completed ? 75 : 50;
 
-    // Background
-    ctx.fillStyle = 'rgba(10, 10, 30, 0.65)';
+    // Background with gradient
+    const panelGrad = ctx.createLinearGradient(x, y, x, y + panelH);
+    panelGrad.addColorStop(0, 'rgba(8, 12, 24, 0.88)');
+    panelGrad.addColorStop(1, 'rgba(8, 12, 24, 0.75)');
+    ctx.fillStyle = panelGrad;
     ctx.beginPath();
     ctx.roundRect(x, y, panelW, panelH, 8);
     ctx.fill();
-    ctx.strokeStyle = missionStatus.completed ? 'rgba(0, 200, 100, 0.5)' : 'rgba(100, 200, 255, 0.3)';
+    ctx.strokeStyle = missionStatus.completed ? 'rgba(0, 180, 90, 0.5)' : 'rgba(80, 160, 220, 0.3)';
     ctx.lineWidth = 1;
     ctx.stroke();
 
     ctx.textAlign = 'left';
 
     // Rings
-    ctx.fillStyle = '#88aacc';
-    ctx.font = '11px Segoe UI, sans-serif';
-    ctx.fillText('RINGS', x + 14, y + 18);
+    ctx.fillStyle = '#6688aa';
+    ctx.font = '10px Segoe UI, sans-serif';
+    ctx.fillText('RINGS', x + 14, y + 20);
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 13px Segoe UI, sans-serif';
-    ctx.fillText(`${missionStatus.ringsPassed} / ${missionStatus.totalRings}`, x + 70, y + 18);
+    ctx.font = 'bold 14px Segoe UI, sans-serif';
+    ctx.fillText(`${missionStatus.ringsPassed} / ${missionStatus.totalRings}`, x + 70, y + 20);
 
-    // Score + Time
-    ctx.fillStyle = '#88aacc';
-    ctx.font = '11px Segoe UI, sans-serif';
-    ctx.fillText('SCORE', x + 14, y + 36);
+    // Score
+    ctx.fillStyle = '#6688aa';
+    ctx.font = '10px Segoe UI, sans-serif';
+    ctx.fillText('SCORE', x + 14, y + 38);
     ctx.fillStyle = '#ffcc00';
-    ctx.font = 'bold 13px Segoe UI, sans-serif';
-    ctx.fillText(`${missionStatus.score}`, x + 70, y + 36);
+    ctx.font = 'bold 14px Segoe UI, sans-serif';
+    ctx.fillText(`${missionStatus.score}`, x + 70, y + 38);
 
     if (missionStatus.completed) {
       ctx.fillStyle = '#00cc44';
       ctx.font = 'bold 12px Segoe UI, sans-serif';
-      ctx.fillText(`✓ COMPLETE  ${Math.floor(missionStatus.timeElapsed)}s`, x + 14, y + 60);
+      ctx.fillText(`✓ COMPLETE  ${Math.floor(missionStatus.timeElapsed)}s`, x + 14, y + 62);
     }
   }
 
@@ -791,34 +848,7 @@ export class HUD {
   }
 
   private drawCameraMode(mode: string): void {
-    const ctx = this._ctx;
-    const w = window.innerWidth;
-    const x = w / 2 - 60;
-    const y = 10;
-    const panelW = 120;
-    const panelH = 28;
-
-    // Panel background
-    ctx.fillStyle = 'rgba(10, 10, 30, 0.65)';
-    ctx.beginPath();
-    ctx.roundRect(x, y, panelW, panelH, 6);
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(100, 200, 255, 0.3)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
-    // Mode label
-    const modeLabels: Record<string, string> = {
-      chase: 'CHASE CAM',
-      cockpit: 'COCKPIT',
-      cinematic: 'CINEMATIC',
-      tower: 'TOWER'
-    };
-
-    ctx.fillStyle = '#00ccff';
-    ctx.font = 'bold 11px Segoe UI, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(modeLabels[mode] || mode.toUpperCase(), x + panelW / 2, y + 18);
+    // Removed - camera mode is now shown in the button
   }
 
   private drawCombatStatus(combat: { wave: number; score: number; playerHealth: number; maxPlayerHealth: number; enemiesAlive: number; totalEnemies: number }): void {
