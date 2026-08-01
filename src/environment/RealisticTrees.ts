@@ -88,10 +88,6 @@ export class RealisticTrees {
     const canopy2 = new THREE.InstancedMesh(canopy2Geo, canopyMat, maxCount);
     const canopy3 = new THREE.InstancedMesh(canopy3Geo, canopyMat, maxCount);
 
-    // Instance color arrays for color variation
-    const trunkColors = new Float32Array(maxCount * 3);
-    const canopyColors = new Float32Array(maxCount * 3);
-
     const dummy = new THREE.Object3D();
     let idx = 0;
 
@@ -107,17 +103,6 @@ export class RealisticTrees {
 
       const scale = 0.7 + Math.random() * 0.6;
       const rotation = Math.random() * Math.PI * 2;
-
-      // Slight color variation
-      const trunkColor = this._varyColor(0.29, 0.21, 0.13, 0.08);
-      trunkColors[idx * 3] = trunkColor.r;
-      trunkColors[idx * 3 + 1] = trunkColor.g;
-      trunkColors[idx * 3 + 2] = trunkColor.b;
-
-      const canopyColor = this._varyColor(0.10, 0.36, 0.10, 0.06);
-      canopyColors[idx * 3] = canopyColor.r;
-      canopyColors[idx * 3 + 1] = canopyColor.g;
-      canopyColors[idx * 3 + 2] = canopyColor.b;
 
       // Trunk positioned at terrain surface (base of trunk at y=h)
       // Cylinder center is at half height, so y = h + (5.5/2)*scale = h + 2.75*scale
@@ -145,25 +130,6 @@ export class RealisticTrees {
 
       idx++;
     }
-
-    // Apply instance colors
-    trunks.instanceColor = new THREE.InstancedBufferAttribute(trunkColors, 3);
-    trunks.material.vertexColors = true;
-    canopy1.instanceColor = new THREE.InstancedBufferAttribute(
-      canopyColors.slice(0, idx * 3),
-      3
-    );
-    canopy1.material.vertexColors = true;
-    canopy2.instanceColor = new THREE.InstancedBufferAttribute(
-      canopyColors.slice(0, idx * 3),
-      3
-    );
-    canopy2.material.vertexColors = true;
-    canopy3.instanceColor = new THREE.InstancedBufferAttribute(
-      canopyColors.slice(0, idx * 3),
-      3
-    );
-    canopy3.material.vertexColors = true;
 
     // Set actual counts
     trunks.count = idx;
@@ -217,9 +183,6 @@ export class RealisticTrees {
     const trunkMesh = new THREE.InstancedMesh(trunkGeo, trunkMat, maxCount);
     const canopyMesh = new THREE.InstancedMesh(canopyGeo, canopyMat, maxCount * spheresPerTree);
 
-    const trunkColors = new Float32Array(maxCount * 3);
-    const canopyColors = new Float32Array(maxCount * spheresPerTree * 3);
-
     const dummy = new THREE.Object3D();
     let idx = 0;
 
@@ -243,12 +206,6 @@ export class RealisticTrees {
 
       const scale = 0.7 + Math.random() * 0.6;
       const rotation = Math.random() * Math.PI * 2;
-
-      // Trunk color variation
-      const trunkColor = this._varyColor(0.36, 0.23, 0.12, 0.06);
-      trunkColors[idx * 3] = trunkColor.r;
-      trunkColors[idx * 3 + 1] = trunkColor.g;
-      trunkColors[idx * 3 + 2] = trunkColor.b;
 
       // Trunk with slight lean - base at terrain surface
       dummy.position.set(x, h + 2.5 * scale, z);
@@ -276,19 +233,12 @@ export class RealisticTrees {
         dummy.rotation.set(0, 0, 0);
         dummy.updateMatrix();
         canopyMesh.setMatrixAt(idx * spheresPerTree + s, dummy.matrix);
-
-        // Canopy color variation (light green range)
-        const c = this._varyColor(0.23, 0.55, 0.25, 0.08);
-        const ci = (idx * spheresPerTree + s) * 3;
-        canopyColors[ci] = c.r;
-        canopyColors[ci + 1] = c.g;
-        canopyColors[ci + 2] = c.b;
       }
 
       idx++;
     }
 
-    // Set actual counts FIRST
+    // Set actual counts
     trunkMesh.count = idx;
     canopyMesh.count = idx * spheresPerTree;
 
@@ -328,8 +278,6 @@ export class RealisticTrees {
     const bush2 = new THREE.InstancedMesh(bush2Geo, bushMat, maxCount);
     const bush3 = new THREE.InstancedMesh(bush3Geo, bushMat, maxCount);
 
-    const colors = new Float32Array(maxCount * 3);
-
     const dummy = new THREE.Object3D();
     let idx = 0;
 
@@ -344,12 +292,6 @@ export class RealisticTrees {
       if (h < 2 || h > 200) continue;
 
       const scale = 0.5 + Math.random() * 0.8;
-
-      // Darker green color variation
-      const c = this._varyColor(0.18, 0.42, 0.18, 0.07);
-      colors[idx * 3] = c.r;
-      colors[idx * 3 + 1] = c.g;
-      colors[idx * 3 + 2] = c.b;
 
       // Main bush sphere
       dummy.position.set(x, h + 0.7 * scale, z);
@@ -404,12 +346,10 @@ export class RealisticTrees {
       color: 0x4a8c3f,
       roughness: 0.9,
       metalness: 0.0,
-      vertexColors: true,
       side: THREE.DoubleSide,
     });
 
     const patches = new THREE.InstancedMesh(patchGeo, patchMat, maxCount);
-    const colors = new Float32Array(maxCount * 3);
 
     const dummy = new THREE.Object3D();
     let idx = 0;
@@ -426,12 +366,6 @@ export class RealisticTrees {
 
       const size = 8 + Math.random() * 18;
 
-      // Green color variation
-      const c = this._varyColor(0.29, 0.55, 0.25, 0.06);
-      colors[idx * 3] = c.r;
-      colors[idx * 3 + 1] = c.g;
-      colors[idx * 3 + 2] = c.b;
-
       dummy.position.set(x, h + 0.15, z);
       dummy.scale.set(size, size, size);
       dummy.rotation.set(-Math.PI / 2, Math.random() * Math.PI, 0);
@@ -441,7 +375,6 @@ export class RealisticTrees {
       idx++;
     }
 
-    patches.instanceColor = new THREE.InstancedBufferAttribute(colors, 3);
     patches.count = idx;
     patches.receiveShadow = true;
 

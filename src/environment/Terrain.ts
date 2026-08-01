@@ -488,38 +488,43 @@ export class Terrain {
   //  Clouds
   // ----------------------------------------------------------
   private createClouds(scene: THREE.Scene) {
+    // Use proper sphere geometry for round clouds
     const cloudMat = new THREE.MeshStandardMaterial({
       color: 0xffffff,
       transparent: true,
       opacity: 0.5,
       roughness: 1,
       metalness: 0,
-      depthWrite: false, // Prevent z-fighting
+      depthWrite: false,
     });
 
-    // Create clouds closer to the spawn area for better visibility
-    for (let i = 0; i < 30; i++) {
+    for (let i = 0; i < 15; i++) {
       const cloudGroup = new THREE.Group();
-      const numPuffs = 5 + Math.floor(Math.random() * 6);
+      const numPuffs = 4 + Math.floor(Math.random() * 4);
+
       for (let j = 0; j < numPuffs; j++) {
-        const radius = 10 + Math.random() * 20;
+        const radius = 8 + Math.random() * 12;
         // High segment count for perfectly round spheres
-        const puff = new THREE.Mesh(new THREE.SphereGeometry(radius, 24, 24), cloudMat);
+        const puff = new THREE.Mesh(
+          new THREE.SphereGeometry(radius, 16, 16),
+          cloudMat
+        );
         puff.position.set(
           (Math.random() - 0.5) * 30,
           (Math.random() - 0.5) * 15,
           (Math.random() - 0.5) * 30,
         );
-        // Equal scaling on all axes - no flattening!
+        // Equal scaling on all axes
         const scale = 0.8 + Math.random() * 0.4;
         puff.scale.set(scale, scale, scale);
         cloudGroup.add(puff);
       }
-      // Position clouds VERY close to spawn area (-600, 15, 0)
+
+      // Position clouds at good viewing distance
       cloudGroup.position.set(
-        -600 + (Math.random() - 0.5) * 2000,  // Near runway
-        80 + Math.random() * 60,              // Just above aircraft eye level
-        (Math.random() - 0.5) * 2000,
+        -600 + (Math.random() - 0.5) * 1500,
+        120 + Math.random() * 80,
+        (Math.random() - 0.5) * 1500,
       );
       this._clouds.add(cloudGroup);
     }

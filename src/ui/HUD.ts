@@ -4,6 +4,7 @@ export class HUD {
   private _ctx: CanvasRenderingContext2D;
   private _overlay: HTMLDivElement;
   private _menuBtn: HTMLButtonElement;
+  private _cameraBtn: HTMLButtonElement;
   private _visible: boolean = true;
 
   // Instrument positions (relative to canvas)
@@ -17,6 +18,7 @@ export class HUD {
   private readonly R_ALTITUDE = 55;
 
   private _onMenuCallback: () => void;
+  private _onCameraCallback: (() => void) | undefined;
   private _gameMode: 'free_flight' | 'ring_mission' | 'combat' = 'free_flight';
 
   constructor(onMenu: () => void, gameMode: 'free_flight' | 'ring_mission' | 'combat' = 'free_flight') {
@@ -81,6 +83,42 @@ export class HUD {
       this._onMenuCallback();
     });
     this._overlay.appendChild(this._menuBtn);
+
+    // Camera button (top-center)
+    this._cameraBtn = document.createElement('button');
+    this._cameraBtn.textContent = '📷 KAMERA';
+    this._cameraBtn.style.cssText = `
+      position: absolute;
+      top: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 200;
+      pointer-events: auto;
+      padding: 10px 24px;
+      font-size: 14px;
+      font-weight: bold;
+      font-family: 'Segoe UI', Tahoma, sans-serif;
+      letter-spacing: 1px;
+      background: rgba(10, 10, 30, 0.75);
+      color: #00ccff;
+      border: 1px solid rgba(0, 204, 255, 0.4);
+      border-radius: 8px;
+      cursor: pointer;
+      backdrop-filter: blur(8px);
+      transition: all 0.2s ease;
+    `;
+    this._cameraBtn.addEventListener('mouseenter', () => {
+      this._cameraBtn.style.background = 'rgba(0, 150, 255, 0.6)';
+      this._cameraBtn.style.borderColor = 'rgba(100, 200, 255, 0.8)';
+    });
+    this._cameraBtn.addEventListener('mouseleave', () => {
+      this._cameraBtn.style.background = 'rgba(10, 10, 30, 0.75)';
+      this._cameraBtn.style.borderColor = 'rgba(0, 204, 255, 0.4)';
+    });
+    this._cameraBtn.addEventListener('click', () => {
+      this._onCameraCallback?.();
+    });
+    this._overlay.appendChild(this._cameraBtn);
 
     this._ctx = this._canvas.getContext('2d')!;
 
@@ -171,6 +209,14 @@ export class HUD {
   setGameMode(mode: 'free_flight' | 'ring_mission' | 'combat'): void {
     this._gameMode = mode;
     console.log('HUD game mode set to:', mode);
+  }
+
+  setCameraCallback(callback: () => void): void {
+    this._onCameraCallback = callback;
+  }
+
+  updateCameraButton(mode: string): void {
+    this._cameraBtn.textContent = `📷 ${mode}`;
   }
 
   // --- Drawing helpers ---

@@ -174,6 +174,13 @@ function startGame(config: AircraftConfig, weather: string, gameMode: GameMode) 
   }
   hud.show();
 
+  // Connect camera button to camera cycling
+  hud.setCameraCallback(() => {
+    const newMode = cameraManager.cycleMode();
+    hud.updateCameraButton(newMode);
+  });
+  hud.updateCameraButton(cameraManager.mode);
+
   // Create radar for combat mode
   if (gameMode === GameMode.COMBAT) {
     if (!radar) {

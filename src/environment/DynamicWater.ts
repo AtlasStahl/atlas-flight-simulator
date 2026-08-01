@@ -23,17 +23,19 @@ export class DynamicWater {
                     return vec3(d.x * sin(w) / c, steep * cos(w), d.y * sin(w) / c);
                 }
                 void main() {
-                    vec3 pos = position + gerstnerWave(pos.xz, 0.04, 6.0, vec2(1.0, 0.5), time)
-                               + gerstnerWave(pos.xz, 0.03, 4.0, vec2(0.8, 1.0), time * 1.3)
-                               + gerstnerWave(pos.xz, 0.02, 2.0, vec2(-0.5, 0.8), time * 0.7);
-                    vNormal = normalize(cross(dFdx(pos), dFdy(pos)));
-                    vec4 worldPos = modelMatrix * vec4(pos, 1.0);
+                    vec3 pos = gerstnerWave(position.xz, 0.04, 6.0, vec2(1.0, 0.5), time)
+                               + gerstnerWave(position.xz, 0.03, 4.0, vec2(0.8, 1.0), time * 1.3)
+                               + gerstnerWave(position.xz, 0.02, 2.0, vec2(-0.5, 0.8), time * 0.7);
+                    vec3 finalPos = position + pos;
+                    vNormal = normalize(cross(dFdx(finalPos), dFdy(finalPos)));
+                    vec4 worldPos = modelMatrix * vec4(finalPos, 1.0);
                     vWorldPosition = worldPos.xyz;
                     gl_Position = projectionMatrix * viewMatrix * worldPos;
                 }
             `,
             fragmentShader: `
-                uniform vec3 waterColor, sunDirection, cameraPosition;
+                uniform vec3 waterColor, sunDirection;
+                uniform vec3 cameraPosition;
                 varying vec3 vWorldPosition, vNormal;
                 void main() {
                     vec3 viewDir = normalize(cameraPosition - vWorldPosition);

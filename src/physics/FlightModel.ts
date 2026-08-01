@@ -157,18 +157,31 @@ export class FlightModel {
     aircraft.velocity.add(acceleration.multiplyScalar(dt));
 
     // ============================================================
-    //  Aerodynamic alignment – velocity naturally aligns with
-    //  the aircraft's forward axis (sideslip damping)
+    //  Bank-to-Turn Physics – when aircraft is rolled (banked),
+    //  lift creates a horizontal component that turns the aircraft.
+    //  This is the PRIMARY way aircraft change direction.
     // ============================================================
-    if (speed > 2) {
+    if (speed > 5) {
+      // Get bank angle (roll angle around forward axis)
+      const bankAngle = aircraft.rotation.x;
+
+      // Horizontal turn rate: stronger response to bank angle
+      const turnRate = Math.sin(bankAngle) * (GRAVITY / speed) * 2.5; // Increased from 0.8 to 2.5
+
+      // Rotate velocity vector around world Y axis (turn)
+      const turnAxis = new THREE.Vector3(0, 1, 0);
+      const turnQuat = new THREE.Quaternion().setFromAxisAngle(turnAxis, turnRate * dt);
+      aircraft.velocity.applyQuaternion(turnQuat);
+
+      // Aerodynamic alignment - much weaker so bank-to-turn works
       const forwardSpeed = aircraft.velocity.dot(this._forward);
       const lateralVelocity = new THREE.Vector3()
         .copy(aircraft.velocity)
         .sub(this._forward.clone().multiplyScalar(forwardSpeed));
 
-      // Damping factor: speed-dependent (faster = more stable)
-      const alignmentStrength = Math.min(0.95, 0.7 + speed * 0.003);
-      lateralVelocity.multiplyScalar(1 - alignmentStrength * dt * 5);
+      // Very weak alignment - let bank-to-turn dominate
+      const alignmentStrength = Math.min(0.3, 0.1 + speed * 0.002);
+      lateralVelocity.multiplyScalar(1 - alignmentStrength * dt * 3);
 
       aircraft.velocity.copy(this._forward.clone().multiplyScalar(forwardSpeed)).add(lateralVelocity);
     }
