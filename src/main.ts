@@ -53,8 +53,8 @@ const terrain = new Terrain(scene);
 const runway = new Runway(scene);
 const missionSystem = new MissionSystem(scene);
 
-// --- Dynamic Water (near lakes) ---
-const dynamicWater = new DynamicWater(scene, new THREE.Vector3(800, 1.5, 600), 200);
+// --- Dynamic Water (far from runway, near distant lakes) ---
+const dynamicWater = new DynamicWater(scene, new THREE.Vector3(1500, 2, 1200), 300);
 
 // --- Atmosphere & Post-Processing ---
 const atmosphere = new Atmosphere(scene, sunLight.position);
@@ -86,8 +86,8 @@ let selectedGameMode: GameMode = GameMode.FREE_FLIGHT;
 // Runway bounds for collision detection
 const runwayBounds = runway.bounds;
 
-// --- Start Position (on runway, facing positive X) ---
-const startPos = new THREE.Vector3(-600, 15, 0); // 15m above runway, away from lake
+// --- Start Position (on runway center, facing positive X) ---
+const startPos = new THREE.Vector3(-600, 1.5, 0); // On runway surface (y=1.5)
 const startRot = new THREE.Euler(0, 0, 0, 'YXZ');
 
 function returnToMenu() {
@@ -99,18 +99,48 @@ function returnToMenu() {
     radar.hide();
   }
   
-  // Stop combat
+  // Stop combat and clean up
   combatManager.reset();
   
-  // Remove aircraft
+  // Clean up weather system
+  if (weatherSystem) {
+    weatherSystem.cleanup();
+    weatherSystem = null;
+  }
+  
+  // Remove aircraft with proper disposal
   if (aircraft) {
     scene.remove(aircraft.group);
+    // Dispose aircraft geometries and materials
+    aircraft.group.traverse(child => {
+      if (child instanceof THREE.Mesh) {
+        child.geometry?.dispose();
+        if (Array.isArray(child.material)) {
+          child.material.forEach(m => m.dispose());
+        } else {
+          child.material?.dispose();
+        }
+      }
+    });
     aircraft = null;
   }
   if (engineEffects) {
     scene.remove(engineEffects.group);
+    engineEffects.group.traverse(child => {
+      if (child instanceof THREE.Mesh) {
+        child.geometry?.dispose();
+        if (Array.isArray(child.material)) {
+          child.material.forEach(m => m.dispose());
+        } else {
+          child.material?.dispose();
+        }
+      }
+    });
     engineEffects = null;
   }
+  
+  // Reset flight model state
+  flightModel.reset?.();
   
   // Show menu
   if (menu) {
@@ -124,19 +154,42 @@ function startGame(config: AircraftConfig, weather: string, gameMode: GameMode) 
   selectedWeather = weather;
   selectedGameMode = gameMode;
   
-  console.log('Starting game:', { aircraft: config.type, weather, mode: gameMode });
+  console.log('[Game] Starting:', { aircraft: config.type, weather, mode: gameMode });
   
-  // Remove old aircraft if exists
+  // Remove old aircraft with proper disposal
   if (aircraft) {
     scene.remove(aircraft.group);
+    aircraft.group.traverse(child => {
+      if (child instanceof THREE.Mesh) {
+        child.geometry?.dispose();
+        if (Array.isArray(child.material)) {
+          child.material.forEach(m => m.dispose());
+        } else {
+          child.material?.dispose();
+        }
+      }
+    });
   }
   if (engineEffects) {
     scene.remove(engineEffects.group);
+    engineEffects.group.traverse(child => {
+      if (child instanceof THREE.Mesh) {
+        child.geometry?.dispose();
+        if (Array.isArray(child.material)) {
+          child.material.forEach(m => m.dispose());
+        } else {
+          child.material?.dispose();
+        }
+      }
+    });
   }
 
   // Create new aircraft
   aircraft = new Aircraft(config);
-  aircraft.position.copy(startPos);
+  // Compute correct ground level so aircraft starts on the surface, not floating above
+  const terrainH = terrain.getHeight(startPos.x, startPos.z);
+  const groundY = terrainH + 0.5 * config.scale;
+  aircraft.position.set(startPos.x, groundY + 0.1, startPos.z);
   aircraft.rotation.copy(startRot);
   scene.add(aircraft.group);
 
@@ -145,7 +198,12 @@ function startGame(config: AircraftConfig, weather: string, gameMode: GameMode) 
 
   // Reset systems
   groundCollision.reset();
-  missionSystem.reset(scene);
+  // Only create rings for ring mission mode
+  if (gameMode === GameMode.RING_MISSION) {
+    missionSystem.reset(scene);
+  } else {
+    missionSystem.clearRings(scene);
+  }
   combatManager.reset();
   
   // Setup weather
@@ -160,10 +218,8 @@ function startGame(config: AircraftConfig, weather: string, gameMode: GameMode) 
 
   // Setup game mode
   if (gameMode === GameMode.COMBAT) {
-    console.log('Starting combat mode');
+    console.log('[Game] Starting combat mode');
     combatManager.startWave();
-  } else if (gameMode === GameMode.RING_MISSION) {
-    missionSystem.reset(scene);
   }
 
   // Create HUD with menu callback
@@ -344,7 +400,10 @@ function animate() {
     if (hud) {
       const speed = aircraft.velocity.length();
       const altitude = aircraft.position.y;
-      const heading = Math.atan2(aircraft.velocity.z, aircraft.velocity.x);
+      // Use aircraft rotation for heading when speed is low (prevents wild spinning)
+      const heading = speed > 5
+        ? Math.atan2(aircraft.velocity.z, aircraft.velocity.x)
+        : -aircraft.rotation.y;
       const verticalSpeed = aircraft.velocity.y;
       const pitch = aircraft.rotation.y;
       const roll = aircraft.rotation.x;

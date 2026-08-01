@@ -98,10 +98,12 @@ export class RealisticTrees {
       if (this._inAirportZone(x, z, 150)) continue;
 
       const h = this._getHeight(x, z);
-      // Pines on hills and mountains (15-350m)
+      // Pines on hills and mountains (15-350m) - ensure not floating in air
       if (h < 15 || h > 350) continue;
+      // Ensure tree won't appear to float - check that terrain is solid at this height
+      if (h > 200) continue; // Don't place on steep mountains where they'd look floating
 
-      const scale = 0.7 + Math.random() * 0.6;
+      const scale = 1.5 + Math.random() * 1.2; // Increased from 0.7-1.3 to 1.5-2.7 for better visibility
       const rotation = Math.random() * Math.PI * 2;
 
       // Trunk positioned at terrain surface (base of trunk at y=h)
@@ -201,10 +203,12 @@ export class RealisticTrees {
       if (this._inAirportZone(x, z, 120)) continue;
 
       const h = this._getHeight(x, z);
-      // Deciduous trees at lower-mid elevations (5-150m)
+      // Deciduous trees at lower-mid elevations (5-150m) - ensure not floating
       if (h < 5 || h > 150) continue;
+      // Keep away from steep terrain
+      if (h > 100) continue;
 
-      const scale = 0.7 + Math.random() * 0.6;
+      const scale = 1.5 + Math.random() * 1.2; // Increased from 0.7-1.3 to 1.5-2.7 for better visibility
       const rotation = Math.random() * Math.PI * 2;
 
       // Trunk with slight lean - base at terrain surface
@@ -288,10 +292,10 @@ export class RealisticTrees {
       if (this._inAirportZone(x, z, 80)) continue;
 
       const h = this._getHeight(x, z);
-      // Bushes at low-mid elevations (2-200m)
-      if (h < 2 || h > 200) continue;
+      // Bushes at low-mid elevations (2-80m) - keep them grounded
+      if (h < 2 || h > 80) continue;
 
-      const scale = 0.5 + Math.random() * 0.8;
+      const scale = 1.2 + Math.random() * 1.5; // Increased from 0.5-1.3 to 1.2-2.7 for better visibility
 
       // Main bush sphere
       dummy.position.set(x, h + 0.7 * scale, z);
@@ -427,9 +431,12 @@ export class RealisticTrees {
     z: number,
     buffer: number = 0
   ): boolean {
+    // Much larger exclusion zone to prevent trees from appearing near flight paths
+    const exclusionX = this._airportHalfX + 400 + buffer; // Increased from 150 to 550+
+    const exclusionZ = this._airportHalfZ + 300 + buffer; // Increased from 200 to 500+
     return (
-      Math.abs(x) < this._airportHalfX + buffer &&
-      Math.abs(z) < this._airportHalfZ + buffer
+      Math.abs(x) < exclusionX &&
+      Math.abs(z) < exclusionZ
     );
   }
 

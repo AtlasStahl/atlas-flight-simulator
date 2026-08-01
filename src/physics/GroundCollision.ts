@@ -7,6 +7,7 @@ export class GroundCollision {
   private _crashTimer = 0;
   private _getTerrainHeight: (x: number, z: number) => number;
   private _gracePeriod = 3; // 3 seconds of grace after start - no crash detection
+  private _groundThreshold = 3.0; // Hysteresis threshold for ground detection (meters)
 
   constructor(getTerrainHeight?: (x: number, z: number) => number) {
     // Default to flat ground if no height function provided
@@ -32,9 +33,12 @@ export class GroundCollision {
       return;
     }
 
-    // --- On ground ---
-    if (aircraft.position.y <= groundY) {
+    // --- On ground (with hysteresis to prevent flickering) ---
+    const isNearGround = aircraft.position.y <= groundY + this._groundThreshold;
+    
+    if (isNearGround && (aircraft.position.y <= groundY || this._taxiMode)) {
       aircraft.position.y = groundY + 0.1; // Small offset to prevent z-fighting
+      this._taxiMode = true;
 
       // Check if on runway for better friction
       const onRunway = aircraft.position.x >= runwayBounds.x1 &&
@@ -70,8 +74,8 @@ export class GroundCollision {
         aircraft.rotation.y *= 0.95;
       }
 
-      // --- Takeoff ---
-      if (speed >= aircraft.config.rotateSpeed * 0.8 && controls.pitchDown) {
+      // --- Takeoff: pitch up (nose up) at rotate speed ---
+      if (speed >= aircraft.config.rotateSpeed * 0.8 && controls.pitchUp) {
         this._taxiMode = false;
         aircraft.velocity.y = 3; // Initial upward velocity
         aircraft.position.y = groundY + 2;
@@ -79,7 +83,8 @@ export class GroundCollision {
       }
 
       this._taxiMode = true;
-    } else {
+    } else if (aircraft.position.y > groundY + this._groundThreshold) {
+      // Only clear taxi mode when well above ground (hysteresis)
       this._taxiMode = false;
     }
   }

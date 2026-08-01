@@ -11,7 +11,7 @@ export class DynamicWater {
                 time: { value: 0 },
                 waterColor: { value: new THREE.Color(0x1a6fa0) },
                 sunDirection: { value: new THREE.Vector3(0.5, 1, 0.3).normalize() },
-                cameraPosition: { value: new THREE.Vector3() }
+                uCameraPosition: { value: new THREE.Vector3() }
             },
             vertexShader: `
                 uniform float time;
@@ -27,18 +27,30 @@ export class DynamicWater {
                                + gerstnerWave(position.xz, 0.03, 4.0, vec2(0.8, 1.0), time * 1.3)
                                + gerstnerWave(position.xz, 0.02, 2.0, vec2(-0.5, 0.8), time * 0.7);
                     vec3 finalPos = position + pos;
-                    vNormal = normalize(cross(dFdx(finalPos), dFdy(finalPos)));
+                    // Calculate analytical normal from wave derivatives
+                    float eps = 0.1;
+                    vec2 p1 = position.xz;
+                    vec3 wave1 = gerstnerWave(p1 + vec2(eps, 0), 0.04, 6.0, vec2(1.0, 0.5), time)
+                                + gerstnerWave(p1 + vec2(eps, 0), 0.03, 4.0, vec2(0.8, 1.0), time * 1.3)
+                                + gerstnerWave(p1 + vec2(eps, 0), 0.02, 2.0, vec2(-0.5, 0.8), time * 0.7);
+                    vec3 wave2 = gerstnerWave(p1 + vec2(0, eps), 0.04, 6.0, vec2(1.0, 0.5), time)
+                                + gerstnerWave(p1 + vec2(0, eps), 0.03, 4.0, vec2(0.8, 1.0), time * 1.3)
+                                + gerstnerWave(p1 + vec2(0, eps), 0.02, 2.0, vec2(-0.5, 0.8), time * 0.7);
+                    vec3 dx = (wave1 - pos) / eps;
+                    vec3 dz = (wave2 - pos) / eps;
+                    vNormal = normalize(vec3(dx.x, 1.0, dz.z));
                     vec4 worldPos = modelMatrix * vec4(finalPos, 1.0);
                     vWorldPosition = worldPos.xyz;
                     gl_Position = projectionMatrix * viewMatrix * worldPos;
                 }
             `,
             fragmentShader: `
-                uniform vec3 waterColor, sunDirection;
-                uniform vec3 cameraPosition;
+                uniform vec3 waterColor;
+                uniform vec3 sunDirection;
+                uniform vec3 uCameraPosition;
                 varying vec3 vWorldPosition, vNormal;
                 void main() {
-                    vec3 viewDir = normalize(cameraPosition - vWorldPosition);
+                    vec3 viewDir = normalize(uCameraPosition - vWorldPosition);
                     vec3 normal = normalize(vNormal);
                     float fresnel = pow(1.0 - max(dot(viewDir, normal), 0.0), 3.0);
                     fresnel = mix(0.04, 1.0, fresnel);
@@ -60,7 +72,7 @@ export class DynamicWater {
         this._time += dt;
         (this._mesh.material as THREE.ShaderMaterial).uniforms.time.value = this._time;
         if (cameraPos) {
-            (this._mesh.material as THREE.ShaderMaterial).uniforms.cameraPosition.value.copy(cameraPos);
+            (this._mesh.material as THREE.ShaderMaterial).uniforms.uCameraPosition.value.copy(cameraPos);
         }
     }
 }

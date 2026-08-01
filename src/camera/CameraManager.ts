@@ -45,6 +45,10 @@ export class CameraManager {
     private _transitionEnd = new THREE.Vector3();
     private _transitionProgress = 0;
 
+    // Object pooling - reusable temp vectors
+    private _tempOffset = new THREE.Vector3();
+    private _tempForward = new THREE.Vector3();
+
     constructor(camera: THREE.PerspectiveCamera) {
         this._camera = camera;
         this._chaseSmooth.copy(this._chaseOffset);
@@ -143,26 +147,26 @@ export class CameraManager {
         
         if (this._isOrbiting) {
             // Orbit around aircraft
-            offset = new THREE.Vector3(
+            this._tempOffset.set(
                 Math.sin(this._orbitAngleY) * Math.cos(this._orbitAngleX) * this._orbitRadius,
                 Math.sin(this._orbitAngleX) * this._orbitRadius,
                 Math.cos(this._orbitAngleY) * Math.cos(this._orbitAngleX) * this._orbitRadius
             );
-            this._camera.position.copy(aircraftPos).add(offset);
+            this._camera.position.copy(aircraftPos).add(this._tempOffset);
             this._lookAtTarget.copy(aircraftPos);
         } else {
             // Normal chase with smooth following
-            const offset = this._chaseOffset.clone();
-            offset.applyEuler(aircraftRot);
+            this._tempOffset.copy(this._chaseOffset);
+            this._tempOffset.applyEuler(aircraftRot);
             
-            this._chaseSmooth.lerp(offset, 5 * dt);
+            this._chaseSmooth.lerp(this._tempOffset, 5 * dt);
             this._camera.position.copy(aircraftPos).add(this._chaseSmooth);
             this._camera.position.y = Math.max(this._camera.position.y, 2);
             
             // Look slightly ahead of aircraft
             this._lookAtTarget.copy(aircraftPos);
-            const forward = new THREE.Vector3(1, 0, 0).applyEuler(aircraftRot);
-            this._lookAtTarget.add(forward.multiplyScalar(20));
+            this._tempForward.set(1, 0, 0).applyEuler(aircraftRot);
+            this._lookAtTarget.add(this._tempForward.multiplyScalar(20));
         }
         
         this._camera.lookAt(this._lookAtTarget);
@@ -170,13 +174,13 @@ export class CameraManager {
 
     private _updateCockpit(aircraftPos: THREE.Vector3, aircraftRot: THREE.Euler, dt: number): void {
         // Position inside cockpit
-        const offset = this._cockpitOffset.clone();
-        offset.applyEuler(aircraftRot);
-        this._camera.position.copy(aircraftPos).add(offset);
+        this._tempOffset.copy(this._cockpitOffset);
+        this._tempOffset.applyEuler(aircraftRot);
+        this._camera.position.copy(aircraftPos).add(this._tempOffset);
         
         // Look forward from cockpit
-        const forward = new THREE.Vector3(1, 0, 0).applyEuler(aircraftRot);
-        this._lookAtTarget.copy(this._camera.position).add(forward.multiplyScalar(100));
+        this._tempForward.set(1, 0, 0).applyEuler(aircraftRot);
+        this._lookAtTarget.copy(this._camera.position).add(this._tempForward.multiplyScalar(100));
         
         this._camera.lookAt(this._lookAtTarget);
     }

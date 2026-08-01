@@ -33,7 +33,7 @@ export interface AircraftConfig {
   /** Scale factor for the 3D model */
   scale: number;
   /** Aircraft type identifier */
-  type: 'cessna' | 'boeing' | 'extra';
+  type: 'cessna' | 'boeing' | 'extra' | 'f16' | 'su27';
 }
 
 export const AIRCRAFT_CONFIGS: Record<string, AircraftConfig> = {

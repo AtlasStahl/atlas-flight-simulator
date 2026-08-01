@@ -16,7 +16,7 @@ export class MissionSystem {
   private _score: number = 0;
 
   constructor(scene: THREE.Scene) {
-    this.createRingMission(scene);
+    // Don't create rings yet - wait for ring_mission mode
   }
 
   createRingMission(scene: THREE.Scene) {
@@ -71,6 +71,14 @@ export class MissionSystem {
   }
 
   reset(scene: THREE.Scene) {
+    // Only create rings when explicitly called for ring mission
     this.createRingMission(scene);
+  }
+
+  clearRings(scene: THREE.Scene) {
+    // Remove all rings (for free flight mode)
+    this._rings.forEach(ring => scene.remove(ring.mesh));
+    this._rings = [];
+    this._score = 0;
   }
 }

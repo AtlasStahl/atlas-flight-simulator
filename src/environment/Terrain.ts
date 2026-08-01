@@ -101,7 +101,7 @@ export class Terrain {
     new AirportVehicles().createVehicles(scene);
     this.createVegetation(scene);
     this.createInfrastructure(scene);
-    this.createClouds(scene);
+    // Clouds are now managed by WeatherSystem - removed duplicate cloud system
   }
 
   // ----------------------------------------------------------
@@ -282,64 +282,12 @@ export class Terrain {
   }
 
   // ----------------------------------------------------------
-  //  Water – lakes + river
+  //  Water – removed static lakes/river (DynamicWater handles water rendering)
+  //  Static water planes were appearing to float on hills
   // ----------------------------------------------------------
   private createWater(scene: THREE.Scene) {
-    const waterMat = new THREE.MeshStandardMaterial({
-      color: 0x1a6fa0,
-      transparent: true,
-      opacity: 0.7,
-      roughness: 0.05,
-      metalness: 0.4,
-    });
-
-    // Lakes in valleys (moved away from runway area at x=-600, z=0)
-    const lakes = [
-      { x: 800, z: 600, r: 100 },
-      { x: 1500, z: -400, r: 120 },
-      { x: -1200, z: -600, r: 90 },
-      { x: 300, z: -900, r: 110 },
-      { x: 1800, z: 1200, r: 70 },
-      { x: -1600, z: 800, r: 85 },
-      { x: -2000, z: 400, r: 75 }, // Moved far from runway
-    ];
-
-    lakes.forEach(l => {
-      const lakeGeo = new THREE.CircleGeometry(l.r, 32);
-      const lake = new THREE.Mesh(lakeGeo, waterMat);
-      lake.rotation.x = -Math.PI / 2;
-      const lh = this._rawHeight(l.x, l.z);
-      lake.position.set(l.x, Math.max(lh, 1.5), l.z);
-      this._waterGroup.add(lake);
-    });
-
-    // River – series of connected segments (moved away from runway area)
-    const riverPath: [number, number][] = [];
-    for (let t = 0; t <= 1; t += 0.02) {
-      const rx = -2000 + t * 4000;
-      // Shift river far from runway (z offset + larger sine amplitude)
-      const rz = Math.sin(t * Math.PI * 3) * 1200 + 500 + this._noise.noise2D(t * 5, 0) * 300;
-      riverPath.push([rx, rz]);
-    }
-
-    for (let i = 0; i < riverPath.length - 1; i++) {
-      const [x1, z1] = riverPath[i];
-      const [x2, z2] = riverPath[i + 1];
-      const mx = (x1 + x2) / 2;
-      const mz = (z1 + z2) / 2;
-      const dx = x2 - x1;
-      const dz = z2 - z1;
-      const len = Math.sqrt(dx * dx + dz * dz);
-      const angle = Math.atan2(dz, dx);
-      const riverGeo = new THREE.PlaneGeometry(len, 12);
-      const river = new THREE.Mesh(riverGeo, waterMat);
-      river.rotation.x = -Math.PI / 2;
-      river.rotation.z = -angle;
-      const rh = this._rawHeight(mx, mz);
-      river.position.set(mx, Math.max(rh, 1.5), mz);
-      this._waterGroup.add(river);
-    }
-
+    // No static water - DynamicWater is used for realistic water rendering
+    // Empty water group is still added to scene for compatibility
     scene.add(this._waterGroup);
   }
 
@@ -485,63 +433,9 @@ export class Terrain {
   }
 
   // ----------------------------------------------------------
-  //  Clouds
-  // ----------------------------------------------------------
-  private createClouds(scene: THREE.Scene) {
-    // Use proper sphere geometry for round clouds
-    const cloudMat = new THREE.MeshStandardMaterial({
-      color: 0xffffff,
-      transparent: true,
-      opacity: 0.5,
-      roughness: 1,
-      metalness: 0,
-      depthWrite: false,
-    });
-
-    for (let i = 0; i < 15; i++) {
-      const cloudGroup = new THREE.Group();
-      const numPuffs = 4 + Math.floor(Math.random() * 4);
-
-      for (let j = 0; j < numPuffs; j++) {
-        const radius = 8 + Math.random() * 12;
-        // High segment count for perfectly round spheres
-        const puff = new THREE.Mesh(
-          new THREE.SphereGeometry(radius, 16, 16),
-          cloudMat
-        );
-        puff.position.set(
-          (Math.random() - 0.5) * 30,
-          (Math.random() - 0.5) * 15,
-          (Math.random() - 0.5) * 30,
-        );
-        // Equal scaling on all axes
-        const scale = 0.8 + Math.random() * 0.4;
-        puff.scale.set(scale, scale, scale);
-        cloudGroup.add(puff);
-      }
-
-      // Position clouds at good viewing distance
-      cloudGroup.position.set(
-        -600 + (Math.random() - 0.5) * 1500,
-        120 + Math.random() * 80,
-        (Math.random() - 0.5) * 1500,
-      );
-      this._clouds.add(cloudGroup);
-    }
-
-    scene.add(this._clouds);
-  }
-
-  // ----------------------------------------------------------
   //  Update
   // ----------------------------------------------------------
   update(dt: number) {
-    // Drift clouds
-    this._clouds.children.forEach(cloud => {
-      cloud.position.x += 5 * dt;
-      if (cloud.position.x > 4000) cloud.position.x = -4000;
-    });
-
     // Animate water (gentle wave)
     this._waterGroup.children.forEach((w, i) => {
       w.position.y += Math.sin(performance.now() * 0.001 + i) * 0.002;

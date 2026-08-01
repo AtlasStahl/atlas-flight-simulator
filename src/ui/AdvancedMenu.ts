@@ -2,14 +2,26 @@ import { type AircraftConfig, AIRCRAFT_CONFIGS } from '../aircraft/AircraftConfi
 import { GameMode, GAME_MODES } from '../game/GameMode';
 import { WEATHER_PRESETS } from '../weather/WeatherSystem';
 
-/** Simplified single-page menu with aircraft, mode, and weather selection */
+/** Simplified single-page menu with independent aircraft, mode, and weather selection */
 export class AdvancedMenu {
     private _container: HTMLDivElement;
     private _selectedAircraft: string = 'cessna';
     private _selectedWeather: string = 'clear';
     private _selectedGameMode: GameMode = GameMode.FREE_FLIGHT;
 
+    // References to sections for independent updates
+    private _aircraftRow: HTMLDivElement | null = null;
+    private _modeCol: HTMLDivElement | null = null;
+    private _weatherCol: HTMLDivElement | null = null;
+
+    private _onSelect: (config: AircraftConfig, weather: string, mode: GameMode) => void;
+
     constructor(onSelect: (config: AircraftConfig, weather: string, mode: GameMode) => void) {
+        this._onSelect = onSelect;
+        this._build();
+    }
+
+    private _build() {
         this._container = document.createElement('div');
         this._container.style.cssText = `
             position: fixed;
@@ -48,16 +60,29 @@ export class AdvancedMenu {
         const contentArea = document.createElement('div');
         contentArea.style.cssText = 'width: 950px; max-width: 95vw; display: flex; flex-direction: column; gap: 15px;';
 
-        // Aircraft row
-        this._buildAircraftRow(contentArea);
+        // Aircraft row (independent section)
+        this._aircraftRow = document.createElement('div');
+        this._aircraftRow.style.cssText = 'display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;';
+        this._renderAircraftCards();
+        contentArea.appendChild(this._aircraftRow);
 
         // Mode + Weather row
         const bottomRow = document.createElement('div');
         bottomRow.style.cssText = 'display: flex; gap: 15px;';
-        this._buildModeCol(bottomRow);
-        this._buildWeatherCol(bottomRow);
-        contentArea.appendChild(bottomRow);
 
+        // Mode column (independent section)
+        this._modeCol = document.createElement('div');
+        this._modeCol.style.cssText = 'flex: 1; display: flex; flex-direction: column; gap: 6px;';
+        this._renderModeButtons();
+        bottomRow.appendChild(this._modeCol);
+
+        // Weather column (independent section)
+        this._weatherCol = document.createElement('div');
+        this._weatherCol.style.cssText = 'flex: 1; display: flex; flex-direction: column; gap: 6px;';
+        this._renderWeatherButtons();
+        bottomRow.appendChild(this._weatherCol);
+
+        contentArea.appendChild(bottomRow);
         this._container.appendChild(contentArea);
 
         // Start button
@@ -85,8 +110,8 @@ export class AdvancedMenu {
         });
         startBtn.addEventListener('click', () => {
             this.hide();
-            onSelect(
-                AIRCRAFT_CONFIGS[this._selectedAircraft],
+            this._onSelect(
+                AIRCRAFT_CONFIGS[this._selectedAircraft as keyof typeof AIRCRAFT_CONFIGS],
                 this._selectedWeather,
                 this._selectedGameMode
             );
@@ -106,7 +131,7 @@ export class AdvancedMenu {
             line-height: 1.6;
         `;
         controls.innerHTML = `
-            <strong>Steuerung</strong> | Pitch: W/S | Roll: A/D | Yaw: Q/E | Throttle: ↑/↓<br>
+            <strong>Steuerung</strong> | Pitch: W/S | Roll: A/D | Yaw: ←/→ | Throttle: ↑/↓<br>
             Kamera: C | Schießen: Space/V | Menü: ESC
         `;
         this._container.appendChild(controls);
@@ -114,9 +139,9 @@ export class AdvancedMenu {
         document.body.appendChild(this._container);
     }
 
-    private _buildAircraftRow(parent: HTMLDivElement) {
-        const row = document.createElement('div');
-        row.style.cssText = 'display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;';
+    private _renderAircraftCards() {
+        if (!this._aircraftRow) return;
+        this._aircraftRow.innerHTML = '';
 
         const types: Array<keyof typeof AIRCRAFT_CONFIGS> = ['cessna', 'boeing', 'extra', 'f16', 'su27'];
         const icons: Record<string, string> = { cessna: '🛩️', boeing: '✈️', extra: '🛫', f16: '🎖️', su27: '🎖️' };
@@ -141,22 +166,20 @@ export class AdvancedMenu {
             `;
             card.addEventListener('click', () => {
                 this._selectedAircraft = type;
-                parent.innerHTML = '';
-                this._buildAircraftRow(parent);
+                this._renderAircraftCards();
             });
-            row.appendChild(card);
+            this._aircraftRow.appendChild(card);
         }
-        parent.appendChild(row);
     }
 
-    private _buildModeCol(parent: HTMLDivElement) {
-        const col = document.createElement('div');
-        col.style.cssText = 'flex: 1; display: flex; flex-direction: column; gap: 6px;';
+    private _renderModeButtons() {
+        if (!this._modeCol) return;
+        this._modeCol.innerHTML = '';
 
         const header = document.createElement('div');
         header.textContent = 'Modus';
         header.style.cssText = 'font-size: 12px; color: #88aacc; font-weight: bold;';
-        col.appendChild(header);
+        this._modeCol.appendChild(header);
 
         for (const key of Object.keys(GAME_MODES)) {
             const mode = GAME_MODES[key as GameMode];
@@ -173,22 +196,20 @@ export class AdvancedMenu {
             btn.innerHTML = `<div style="color: ${sel ? '#00ccff' : '#aabbcc'}; font-weight: bold;">${mode.icon} ${mode.name}</div>`;
             btn.addEventListener('click', () => {
                 this._selectedGameMode = key as GameMode;
-                parent.innerHTML = '';
-                this._buildModeCol(parent);
+                this._renderModeButtons();
             });
-            col.appendChild(btn);
+            this._modeCol.appendChild(btn);
         }
-        parent.appendChild(col);
     }
 
-    private _buildWeatherCol(parent: HTMLDivElement) {
-        const col = document.createElement('div');
-        col.style.cssText = 'flex: 1; display: flex; flex-direction: column; gap: 6px;';
+    private _renderWeatherButtons() {
+        if (!this._weatherCol) return;
+        this._weatherCol.innerHTML = '';
 
         const header = document.createElement('div');
         header.textContent = 'Wetter';
         header.style.cssText = 'font-size: 12px; color: #88aacc; font-weight: bold;';
-        col.appendChild(header);
+        this._weatherCol.appendChild(header);
 
         const icons: Record<string, string> = { clear: '☀️', cloudy: '⛅', overcast: '☁️', rain: '🌧️', storm: '⛈️' };
         for (const key of Object.keys(WEATHER_PRESETS)) {
@@ -205,12 +226,10 @@ export class AdvancedMenu {
             btn.innerHTML = `<div style="color: ${sel ? '#00ccff' : '#aabbcc'}; font-weight: bold;">${icons[key]} ${key.charAt(0).toUpperCase()+key.slice(1)}</div>`;
             btn.addEventListener('click', () => {
                 this._selectedWeather = key;
-                parent.innerHTML = '';
-                this._buildWeatherCol(parent);
+                this._renderWeatherButtons();
             });
-            col.appendChild(btn);
+            this._weatherCol.appendChild(btn);
         }
-        parent.appendChild(col);
     }
 
     hide() {

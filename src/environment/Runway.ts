@@ -17,7 +17,7 @@ export class Runway {
     const width = 60;
     const length = this._runwayLength;
 
-    // Runway surface - slightly elevated above terrain to avoid Z-fighting
+    // Runway surface - elevated above terrain to avoid Z-fighting
     const runwayGeo = new THREE.PlaneGeometry(length, width, 1, 1);
     const runwayMat = new THREE.MeshStandardMaterial({
       color: 0x3a3a3a,
@@ -27,7 +27,7 @@ export class Runway {
     });
     const runway = new THREE.Mesh(runwayGeo, runwayMat);
     runway.rotation.x = -Math.PI / 2;
-    runway.position.y = 0.15; // Elevated above terrain to prevent Z-fighting
+    runway.position.y = 1.5; // Elevated above terrain (0) to prevent Z-fighting
     runway.receiveShadow = true;
     scene.add(runway);
 
@@ -41,7 +41,7 @@ export class Runway {
       });
       const shoulder = new THREE.Mesh(shoulderGeo, shoulderMat);
       shoulder.rotation.x = -Math.PI / 2;
-      shoulder.position.y = 0.12;
+      shoulder.position.y = 1.2;
       shoulder.position.z = side * (width / 2 + 4);
       shoulder.receiveShadow = true;
       scene.add(shoulder);
@@ -67,7 +67,7 @@ export class Runway {
         markingMat
       );
       dash.rotation.x = -Math.PI / 2;
-      dash.position.y = 0.16;
+      dash.position.y = 1.55;
       dash.position.x = startX + i * (dashLength + dashGap);
       scene.add(dash);
     }
@@ -79,7 +79,7 @@ export class Runway {
         markingMat
       );
       edgeLine.rotation.x = -Math.PI / 2;
-      edgeLine.position.y = 0.16;
+      edgeLine.position.y = 1.55;
       edgeLine.position.z = side * 28;
       scene.add(edgeLine);
     }
@@ -93,7 +93,7 @@ export class Runway {
           markingMat
         );
         bar.rotation.x = -Math.PI / 2;
-        bar.position.y = 0.16;
+        bar.position.y = 1.55;
         bar.position.x = xEnd;
         bar.position.z = -10 + j * 7;
         scene.add(bar);
@@ -107,7 +107,7 @@ export class Runway {
         markingMat
       );
       aimMark.rotation.x = -Math.PI / 2;
-      aimMark.position.y = 0.16;
+      aimMark.position.y = 1.55;
       aimMark.position.x = xEnd;
       scene.add(aimMark);
     }
@@ -119,7 +119,7 @@ export class Runway {
         markingMat
       );
       marker.rotation.x = -Math.PI / 2;
-      marker.position.y = 0.02;
+      marker.position.y = 1.55;
       marker.position.x = xEnd;
       marker.position.z = -10;
       scene.add(marker);

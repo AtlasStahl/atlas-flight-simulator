@@ -167,47 +167,54 @@ export class WeatherSystem {
         if (this._config.cloudDensity <= 0) return;
         
         const layers = 3;
-        const cloudsPerLayer = Math.floor(this._config.cloudDensity * 80); // More clouds for better look
+        const cloudsPerLayer = Math.floor(this._config.cloudDensity * 60); // Balanced cloud count
+        
+        // Shared geometry pool for cloud puffs (reduces memory)
+        const puffGeometries = [
+            new THREE.SphereGeometry(1, 12, 10), // Lower segment count - optimized for distance viewing
+            new THREE.SphereGeometry(1, 10, 8),
+            new THREE.SphereGeometry(1, 8, 6),
+        ];
         
         for (let l = 0; l < layers; l++) {
             const group = new THREE.Group();
-            const altitude = 300 + l * 100; // Lower altitude for better visibility
+            const altitude = 250 + l * 120; // Better altitude distribution
             
-            const cloudMat = new THREE.MeshStandardMaterial({
+            // Cloud material - use MeshBasicMaterial to avoid picking up environment color
+            const cloudMat = new THREE.MeshBasicMaterial({
                 color: 0xffffff,
                 transparent: true,
-                opacity: 0.5 + l * 0.1,
-                depthWrite: false
+                opacity: 0.7 + l * 0.05,
+                depthWrite: false,
             });
             
             for (let i = 0; i < cloudsPerLayer; i++) {
-                // Each cloud is a cluster of spheres for fluffy look
+                // Each cloud is a cluster of spheres for fluffy volumetric look
                 const cloudGroup = new THREE.Group();
-                const numPuffs = 4 + Math.floor(Math.random() * 5); // More puffs per cloud
+                const numPuffs = 5 + Math.floor(Math.random() * 4); // 5-8 puffs per cloud
                 
                 for (let p = 0; p < numPuffs; p++) {
-                    const size = 20 + Math.random() * 40; // Smaller individual puffs
-                    // High segment count for perfectly round spheres
-                    const geo = new THREE.SphereGeometry(size, 20, 20);
-                    const puff = new THREE.Mesh(geo, cloudMat);
+                    const size = 15 + Math.random() * 35; // Larger puffs for better visibility from below
+                    const geoIdx = Math.floor(Math.random() * puffGeometries.length);
+                    const puff = new THREE.Mesh(puffGeometries[geoIdx], cloudMat);
                     
-                    // Position puffs closer together for a cohesive cloud
+                    // Position puffs in a more horizontal spread (wider, less tall) for better viewing from below
                     puff.position.set(
-                        (Math.random() - 0.5) * 40,
-                        (Math.random() - 0.5) * 15,
-                        (Math.random() - 0.5) * 40
+                        (Math.random() - 0.5) * 50, // Wider horizontal spread
+                        (Math.random() - 0.5) * 8,  // Flatter vertical profile
+                        (Math.random() - 0.5) * 50  // Wider depth spread
                     );
-                    // Equal scaling on all axes for round clouds
-                    const scale = 0.8 + Math.random() * 0.4;
-                    puff.scale.set(scale, scale, scale);
+                    // Equal scaling for round appearance
+                    const scale = size * (0.8 + Math.random() * 0.4);
+                    puff.scale.set(scale, scale * 0.7, scale); // Slightly flattened for natural look
                     cloudGroup.add(puff);
                 }
                 
-                // Position clouds closer to the aircraft for better visibility
+                // Position clouds in a large area around the aircraft
                 cloudGroup.position.set(
-                    (Math.random() - 0.5) * 8000,
-                    altitude + Math.random() * 30,
-                    (Math.random() - 0.5) * 8000
+                    (Math.random() - 0.5) * 6000,
+                    altitude + Math.random() * 40,
+                    (Math.random() - 0.5) * 6000
                 );
                 
                 group.add(cloudGroup);

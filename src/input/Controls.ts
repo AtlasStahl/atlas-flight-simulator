@@ -43,13 +43,13 @@ export class Controls {
     this.pitchUp = this.keys.has('KeyW');
     this.pitchDown = this.keys.has('KeyS');
 
-    // Roll: A/D or ArrowLeft/ArrowRight
-    this.rollLeft = this.keys.has('KeyA') || this.keys.has('ArrowLeft');
-    this.rollRight = this.keys.has('KeyD') || this.keys.has('ArrowRight');
+    // Roll: A/D
+    this.rollLeft = this.keys.has('KeyA');
+    this.rollRight = this.keys.has('KeyD');
 
-    // Yaw: Q/E
-    this.yawLeft = this.keys.has('KeyQ');
-    this.yawRight = this.keys.has('KeyE');
+    // Yaw: ArrowLeft/ArrowRight
+    this.yawLeft = this.keys.has('ArrowLeft');
+    this.yawRight = this.keys.has('ArrowRight');
 
     // Throttle: ArrowUp/ArrowDown
     this.throttleUp = this.keys.has('ArrowUp');
