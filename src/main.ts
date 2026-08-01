@@ -18,6 +18,7 @@ import { WeatherSystem, WEATHER_PRESETS } from './weather/WeatherSystem';
 import { CombatManager } from './combat/CombatManager';
 import { RadarDisplay } from './ui/RadarDisplay';
 import { GameMode, GAME_MODES } from './game/GameMode';
+import { DynamicWater } from './environment/DynamicWater';
 
 // --- Three.js Setup ---
 const scene = new THREE.Scene();
@@ -52,6 +53,9 @@ const terrain = new Terrain(scene);
 const runway = new Runway(scene);
 const missionSystem = new MissionSystem(scene);
 
+// --- Dynamic Water (near lakes) ---
+const dynamicWater = new DynamicWater(scene, new THREE.Vector3(800, 1.5, 600), 200);
+
 // --- Atmosphere & Post-Processing ---
 const atmosphere = new Atmosphere(scene, sunLight.position);
 const postProcessing = new PostProcessingManager(scene, camera, renderer);
@@ -83,7 +87,7 @@ let selectedGameMode: GameMode = GameMode.FREE_FLIGHT;
 const runwayBounds = runway.bounds;
 
 // --- Start Position (on runway, facing positive X) ---
-const startPos = new THREE.Vector3(-600, 0, 0);
+const startPos = new THREE.Vector3(-600, 15, 0); // 15m above runway, away from lake
 const startRot = new THREE.Euler(0, 0, 0, 'YXZ');
 
 function returnToMenu() {
@@ -120,6 +124,8 @@ function startGame(config: AircraftConfig, weather: string, gameMode: GameMode) 
   selectedWeather = weather;
   selectedGameMode = gameMode;
   
+  console.log('Starting game:', { aircraft: config.type, weather, mode: gameMode });
+  
   // Remove old aircraft if exists
   if (aircraft) {
     scene.remove(aircraft.group);
@@ -154,6 +160,7 @@ function startGame(config: AircraftConfig, weather: string, gameMode: GameMode) 
 
   // Setup game mode
   if (gameMode === GameMode.COMBAT) {
+    console.log('Starting combat mode');
     combatManager.startWave();
   } else if (gameMode === GameMode.RING_MISSION) {
     missionSystem.reset(scene);
@@ -269,12 +276,13 @@ function animate() {
     // Update flight physics
     flightModel.update(aircraft, controls, dt);
 
-    // Apply weather effects
+// Update weather effects (very subtle influence, not overwhelming)
     if (weatherSystem) {
       const windEffect = weatherSystem.getWindEffect(aircraft.velocity);
       const turbulence = weatherSystem.getTurbulence(now / 1000);
-      aircraft.velocity.add(windEffect);
-      aircraft.velocity.add(turbulence);
+      // Scale down effects significantly so they don't overpower controls
+      aircraft.velocity.add(windEffect.multiplyScalar(0.02));
+      aircraft.velocity.add(turbulence.multiplyScalar(0.05));
     }
 
     // Update ground collision
@@ -316,8 +324,8 @@ function animate() {
       }
     }
 
-    // Update mission system
-    const missionStatus = missionSystem.update(aircraft.position);
+    // Update mission system (only for ring mission mode)
+    const missionStatus = selectedGameMode === GameMode.RING_MISSION ? missionSystem.update(aircraft.position) : undefined;
 
     // Update weather
     if (weatherSystem) {
@@ -333,6 +341,18 @@ function animate() {
       const pitch = aircraft.rotation.y;
       const roll = aircraft.rotation.x;
 
+      // Only pass missionStatus in ring_mission mode
+      const missionData = selectedGameMode === GameMode.RING_MISSION ? missionStatus : undefined;
+      // Only pass combatStatus in combat mode
+      const combatData = selectedGameMode === GameMode.COMBAT ? {
+        wave: combatManager.wave,
+        score: combatManager.score,
+        playerHealth: combatManager.playerHealth,
+        maxPlayerHealth: combatManager.maxPlayerHealth,
+        enemiesAlive: combatManager.enemiesAlive,
+        totalEnemies: combatManager.totalEnemiesInWave
+      } : undefined;
+
       hud.update(
         speed,
         altitude,
@@ -343,16 +363,9 @@ function animate() {
         roll,
         groundCollision.taxiMode,
         aircraft.crashed,
-        missionStatus,
+        missionData,
         cameraManager.mode,
-        selectedGameMode === GameMode.COMBAT ? {
-          wave: combatManager.wave,
-          score: combatManager.score,
-          playerHealth: combatManager.playerHealth,
-          maxPlayerHealth: combatManager.maxPlayerHealth,
-          enemiesAlive: combatManager.enemiesAlive,
-          totalEnemies: combatManager.totalEnemiesInWave
-        } : undefined
+        combatData
       );
     }
     
@@ -364,6 +377,9 @@ function animate() {
 
   // Update terrain/clouds
   terrain.update(dt);
+  
+  // Update dynamic water
+  dynamicWater.update(dt);
 
   // Update atmosphere sky position to follow camera
   atmosphere.updateSkyPosition(camera.position);

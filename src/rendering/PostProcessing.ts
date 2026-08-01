@@ -13,7 +13,7 @@ export class PostProcessingManager {
         this._composer = new EffectComposer(renderer);
         this._composer.addPass(new RenderPass(scene, camera));
         this._bloomPass = new UnrealBloomPass(
-            new THREE.Vector2(window.innerWidth, window.innerHeight), 0.4, 0.5, 0.8
+            new THREE.Vector2(window.innerWidth, window.innerHeight), 0.25, 0.4, 0.9
         );
         this._composer.addPass(this._bloomPass);
         this._composer.addPass(new SMAAPass(window.innerWidth, window.innerHeight));

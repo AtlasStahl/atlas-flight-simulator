@@ -6,6 +6,7 @@ export class GroundCollision {
   private _taxiMode = false;
   private _crashTimer = 0;
   private _getTerrainHeight: (x: number, z: number) => number;
+  private _gracePeriod = 3; // 3 seconds of grace after start - no crash detection
 
   constructor(getTerrainHeight?: (x: number, z: number) => number) {
     // Default to flat ground if no height function provided
@@ -17,18 +18,23 @@ export class GroundCollision {
   update(aircraft: Aircraft, controls: Controls, dt: number, runwayBounds: { x1: number; x2: number; z1: number; z2: number }) {
     if (aircraft.crashed) return;
 
+    // Countdown grace period - no crash detection during startup
+    if (this._gracePeriod > 0) {
+      this._gracePeriod -= dt;
+    }
+
     const terrainH = this._getTerrainHeight(aircraft.position.x, aircraft.position.z);
     const groundY = terrainH + 0.5 * aircraft.config.scale;
 
-    // --- Crash: high sink rate ---
-    if (aircraft.position.y <= groundY && aircraft.velocity.y < -8) {
+    // --- Crash: high sink rate (only after grace period) ---
+    if (this._gracePeriod <= 0 && aircraft.position.y <= groundY && aircraft.velocity.y < -8) {
       this.triggerCrash(aircraft, terrainH);
       return;
     }
 
     // --- On ground ---
     if (aircraft.position.y <= groundY) {
-      aircraft.position.y = groundY;
+      aircraft.position.y = groundY + 0.1; // Small offset to prevent z-fighting
 
       // Check if on runway for better friction
       const onRunway = aircraft.position.x >= runwayBounds.x1 &&
@@ -58,10 +64,10 @@ export class GroundCollision {
       }
 
       // --- Takeoff ---
-      if (speed >= aircraft.config.rotateSpeed && controls.pitchDown) {
+      if (speed >= aircraft.config.rotateSpeed * 0.8 && controls.pitchDown) {
         this._taxiMode = false;
         aircraft.velocity.y = 3; // Initial upward velocity
-        aircraft.position.y = groundY + 1;
+        aircraft.position.y = groundY + 2;
         return;
       }
 
@@ -94,5 +100,6 @@ export class GroundCollision {
   reset() {
     this._taxiMode = false;
     this._crashTimer = 0;
+    this._gracePeriod = 3;
   }
 }

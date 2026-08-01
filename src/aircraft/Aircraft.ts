@@ -43,6 +43,10 @@ export class Aircraft {
       case 'extra':
         this.buildExtra300(s);
         break;
+      case 'f16':
+      case 'su27':
+        this.buildFighterJet(s, this.config.type);
+        break;
     }
   }
 
@@ -1405,6 +1409,116 @@ export class Aircraft {
     );
     navTail.position.set(-1.8 * s, -0.02 * s, 0);
     this._group.add(navTail);
+  }
+
+  // =================================================================
+  // Fighter Jet (F-16 / Su-27) – delta wing, single/dual engine
+  // =================================================================
+  private buildFighterJet(s: number, type: 'f16' | 'su27') {
+    const isF16 = type === 'f16';
+    const bodyMat = new THREE.MeshStandardMaterial({
+      color: isF16 ? 0x556b2f : 0x4a4a4a, // Military green or dark gray
+      metalness: 0.7,
+      roughness: 0.3
+    });
+    const glassMat = new THREE.MeshStandardMaterial({
+      color: 0x88ccff,
+      transparent: true,
+      opacity: 0.4,
+      metalness: 0.05,
+      roughness: 0.05
+    });
+    const metalMat = new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.9, roughness: 0.15 });
+    const darkMetalMat = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.85, roughness: 0.25 });
+    const exhaustMat = new THREE.MeshStandardMaterial({
+      color: 0xff6600,
+      emissive: 0xff4400,
+      emissiveIntensity: 0.5
+    });
+    const navRed = new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xff0000, emissiveIntensity: 0.5 });
+    const navGreen = new THREE.MeshStandardMaterial({ color: 0x00ff00, emissive: 0x00ff00, emissiveIntensity: 0.5 });
+
+    // Fuselage - sleek pointed design
+    const fuselageGeo = new THREE.ConeGeometry(0.4 * s, 6 * s, 12);
+    const fuselage = new THREE.Mesh(fuselageGeo, bodyMat);
+    fuselage.rotation.z = -Math.PI / 2;
+    fuselage.position.x = 0.5 * s;
+    this._group.add(fuselage);
+
+    // Nose cone (pointed)
+    const noseGeo = new THREE.ConeGeometry(0.15 * s, 1.5 * s, 8);
+    const nose = new THREE.Mesh(noseGeo, bodyMat);
+    nose.rotation.z = -Math.PI / 2;
+    nose.position.x = 3.5 * s;
+    this._group.add(nose);
+
+    // Cockpit canopy
+    const cockpitGeo = new THREE.SphereGeometry(0.25 * s, 8, 6);
+    const cockpit = new THREE.Mesh(cockpitGeo, glassMat);
+    cockpit.position.set(1.2 * s, 0.25 * s, 0);
+    cockpit.scale.set(1.2, 0.8, 1);
+    this._group.add(cockpit);
+
+    // Delta wings (large triangular wings)
+    const wingShape = new THREE.Shape();
+    wingShape.moveTo(0, 0);
+    wingShape.lineTo(-2.5 * s, 4 * s);
+    wingShape.lineTo(-2 * s, 0);
+    wingShape.lineTo(-2.5 * s, -4 * s);
+    wingShape.lineTo(0, 0);
+
+    const wingGeo = new THREE.ExtrudeGeometry(wingShape, { depth: 0.08 * s, bevelEnabled: true, bevelThickness: 0.02 * s, bevelSize: 0.02 * s, bevelSegments: 2 });
+    const wings = new THREE.Mesh(wingGeo, bodyMat);
+    wings.position.x = -0.5 * s;
+    this._group.add(wings);
+
+    // Vertical stabilizer(s)
+    if (isF16) {
+      // Single vertical stabilizer (F-16)
+      const stabShape = new THREE.Shape();
+      stabShape.moveTo(0, 0);
+      stabShape.lineTo(-1.5 * s, 0);
+      stabShape.lineTo(-1.5 * s, 1.5 * s);
+      stabShape.lineTo(0, 1.5 * s);
+      const stabGeo = new THREE.ExtrudeGeometry(stabShape, { depth: 0.06 * s, bevelEnabled: true, bevelThickness: 0.02 * s, bevelSize: 0.02 * s, bevelSegments: 2 });
+      const stabilizer = new THREE.Mesh(stabGeo, bodyMat);
+      stabilizer.position.set(-1.5 * s, 0.1 * s, -0.03 * s);
+      this._group.add(stabilizer);
+    } else {
+      // Twin vertical stabilizers (Su-27)
+      const stabShape = new THREE.Shape();
+      stabShape.moveTo(0, 0);
+      stabShape.lineTo(-1.2 * s, 0);
+      stabShape.lineTo(-1.2 * s, 1.2 * s);
+      stabShape.lineTo(0, 1.2 * s);
+      const stabGeo = new THREE.ExtrudeGeometry(stabShape, { depth: 0.06 * s, bevelEnabled: true, bevelThickness: 0.02 * s, bevelSize: 0.02 * s, bevelSegments: 2 });
+
+      const leftStab = new THREE.Mesh(stabGeo, bodyMat);
+      leftStab.position.set(-1.2 * s, 0.1 * s, 1.0 * s);
+      leftStab.rotation.x = -0.2;
+      this._group.add(leftStab);
+
+      const rightStab = new THREE.Mesh(stabGeo, bodyMat);
+      rightStab.position.set(-1.2 * s, 0.1 * s, -1.0 * s);
+      rightStab.rotation.x = 0.2;
+      this._group.add(rightStab);
+    }
+
+    // Engine exhaust
+    const exhaustGeo = new THREE.CylinderGeometry(0.15 * s, 0.2 * s, 0.5 * s, 8);
+    const exhaust = new THREE.Mesh(exhaustGeo, exhaustMat);
+    exhaust.rotation.z = Math.PI / 2;
+    exhaust.position.set(-2 * s, 0, 0);
+    this._group.add(exhaust);
+
+    // Navigation lights
+    const navLeft = new THREE.Mesh(new THREE.SphereGeometry(0.03 * s, 6, 6), navGreen);
+    navLeft.position.set(-2 * s, -0.5 * s, 3.5 * s);
+    this._group.add(navLeft);
+
+    const navRight = new THREE.Mesh(new THREE.SphereGeometry(0.03 * s, 6, 6), navRed);
+    navRight.position.set(-2 * s, -0.5 * s, -3.5 * s);
+    this._group.add(navRight);
   }
 
   updatePropeller(dt: number) {

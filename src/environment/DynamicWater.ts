@@ -54,9 +54,11 @@ export class DynamicWater {
         scene.add(this._mesh);
     }
 
-    update(dt: number, cameraPos: THREE.Vector3) {
+    update(dt: number, cameraPos?: THREE.Vector3) {
         this._time += dt;
         (this._mesh.material as THREE.ShaderMaterial).uniforms.time.value = this._time;
-        (this._mesh.material as THREE.ShaderMaterial).uniforms.cameraPosition.value.copy(cameraPos);
+        if (cameraPos) {
+            (this._mesh.material as THREE.ShaderMaterial).uniforms.cameraPosition.value.copy(cameraPos);
+        }
     }
 }

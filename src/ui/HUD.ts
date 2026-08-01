@@ -154,7 +154,7 @@ export class HUD {
       this.drawCameraMode(cameraMode);
     }
 
-    // Draw mission status if provided
+    // Draw mission status if provided (only for ring mission mode)
     if (missionStatus) {
       this.drawMissionStatus(missionStatus);
     }
@@ -170,6 +170,7 @@ export class HUD {
 
   setGameMode(mode: 'free_flight' | 'ring_mission' | 'combat'): void {
     this._gameMode = mode;
+    console.log('HUD game mode set to:', mode);
   }
 
   // --- Drawing helpers ---
@@ -652,10 +653,29 @@ export class HUD {
     ctx.textAlign = 'left';
     ctx.fillText(statusText, x + 28, y + 26);
 
-    // Sub-text
+    // Sub-text based on game mode
+    let subText: string;
+    if (crashed) {
+      subText = 'Press ESC to reset';
+    } else if (onGround) {
+      subText = 'Throttle up & pitch back';
+    } else {
+      // Mode-specific hints
+      switch (this._gameMode) {
+        case 'combat':
+          subText = 'Space/V to shoot enemies!';
+          break;
+        case 'ring_mission':
+          subText = 'Fly through rings!';
+          break;
+        default:
+          subText = 'Explore freely!';
+      }
+    }
+
     ctx.fillStyle = '#6688aa';
     ctx.font = '10px Segoe UI, sans-serif';
-    ctx.fillText(crashed ? 'Press ESC to reset' : onGround ? 'Throttle up & pitch back' : 'Fly through rings!', x + 16, y + 40);
+    ctx.fillText(subText, x + 16, y + 40);
   }
 
   private drawControlsReference() {

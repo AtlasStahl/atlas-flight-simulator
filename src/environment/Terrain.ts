@@ -227,37 +227,37 @@ export class Terrain {
     const moisture = this._noise.noise2D(x * 0.002, z * 0.002) * 0.5 + 0.5;
     const detail = this._noise.noise2D(x * 0.01, z * 0.01) * 0.1;
 
-    // Color zones by height
+    // Color zones by height - more vibrant colors
     const c = new THREE.Color();
 
     if (h < 2) {
       // Low-lying / wetland – dark green or sand
       if (moisture > 0.5) {
-        c.setRGB(0.15 + detail, 0.25 + detail, 0.08);
+        c.setRGB(0.20 + detail, 0.35 + detail, 0.12); // Rich wetland green
       } else {
-        c.setRGB(0.65 + detail, 0.58 + detail, 0.40);
+        c.setRGB(0.70 + detail, 0.63 + detail, 0.45); // Warm sand
       }
     } else if (h < 40) {
-      // Grass / fields
-      const green = 0.30 + moisture * 0.15 + detail;
-      c.setRGB(0.18 + detail, green, 0.08 + detail);
+      // Grass / fields - vibrant green
+      const green = 0.40 + moisture * 0.20 + detail;
+      c.setRGB(0.22 + detail, green, 0.12 + detail);
     } else if (h < 100) {
-      // Forest / dark green
-      c.setRGB(0.10 + detail, 0.28 + moisture * 0.08, 0.06);
+      // Forest / dark green - deeper greens
+      c.setRGB(0.12 + detail, 0.35 + moisture * 0.10, 0.08);
     } else if (h < 200) {
       // Mountain slope – brown/green mix
       const t = (h - 100) / 100;
       c.lerpColors(
-        new THREE.Color(0.10, 0.28, 0.06),
-        new THREE.Color(0.35, 0.28, 0.18),
+        new THREE.Color(0.12, 0.35, 0.08),
+        new THREE.Color(0.42, 0.32, 0.22),
         t
       );
     } else if (h < 300) {
-      // Rock
+      // Rock - lighter gray-brown
       const t = (h - 200) / 100;
       c.lerpColors(
-        new THREE.Color(0.35, 0.28, 0.18),
-        new THREE.Color(0.45, 0.42, 0.38),
+        new THREE.Color(0.42, 0.32, 0.22),
+        new THREE.Color(0.55, 0.52, 0.48),
         t
       );
     } else if (h < 400) {
@@ -293,15 +293,15 @@ export class Terrain {
       metalness: 0.4,
     });
 
-    // Lakes in valleys
+    // Lakes in valleys (moved away from runway area at x=-600, z=0)
     const lakes = [
       { x: 800, z: 600, r: 100 },
-      { x: -600, z: 400, r: 80 },
       { x: 1500, z: -400, r: 120 },
       { x: -1200, z: -600, r: 90 },
       { x: 300, z: -900, r: 110 },
       { x: 1800, z: 1200, r: 70 },
       { x: -1600, z: 800, r: 85 },
+      { x: -2000, z: 400, r: 75 }, // Moved far from runway
     ];
 
     lakes.forEach(l => {
@@ -313,11 +313,12 @@ export class Terrain {
       this._waterGroup.add(lake);
     });
 
-    // River – series of connected segments
+    // River – series of connected segments (moved away from runway area)
     const riverPath: [number, number][] = [];
     for (let t = 0; t <= 1; t += 0.02) {
       const rx = -2000 + t * 4000;
-      const rz = Math.sin(t * Math.PI * 3) * 800 + this._noise.noise2D(t * 5, 0) * 200;
+      // Shift river far from runway (z offset + larger sine amplitude)
+      const rz = Math.sin(t * Math.PI * 3) * 1200 + 500 + this._noise.noise2D(t * 5, 0) * 300;
       riverPath.push([rx, rz]);
     }
 

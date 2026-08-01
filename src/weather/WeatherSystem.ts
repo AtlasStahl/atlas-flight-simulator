@@ -120,13 +120,13 @@ export class WeatherSystem {
         
         if (this._config.rainIntensity <= 0) return;
         
-        const count = Math.floor(this._config.rainIntensity * 50000);
+        const count = Math.floor(this._config.rainIntensity * 15000); // Reduced from 50000
         const geo = new THREE.BufferGeometry();
         this._rainPositions = new Float32Array(count * 3);
         
         // Create rain drops in a large volume around the player
-        const spread = 2000;
-        const height = 500;
+        const spread = 800;
+        const height = 300;
         for (let i = 0; i < count; i++) {
             this._rainPositions[i * 3] = (Math.random() - 0.5) * spread;
             this._rainPositions[i * 3 + 1] = Math.random() * height;
@@ -136,11 +136,13 @@ export class WeatherSystem {
         geo.setAttribute('position', new THREE.BufferAttribute(this._rainPositions, 3));
         
         const mat = new THREE.PointsMaterial({
-            color: 0xaaaaaa,
-            size: 2,
+            color: 0xccccdd,
+            size: 1.5,
             transparent: true,
-            opacity: this._config.rainIntensity * 0.6,
-            depthWrite: false
+            opacity: this._config.rainIntensity * 0.3,
+            depthWrite: false,
+            sizeAttenuation: true,
+            blending: THREE.AdditiveBlending
         });
         
         this._rainParticles = new THREE.Points(geo, mat);
@@ -185,15 +187,21 @@ export class WeatherSystem {
                 
                 for (let p = 0; p < numPuffs; p++) {
                     const size = 30 + Math.random() * 60;
-                    const geo = new THREE.SphereGeometry(size, 8, 6);
+                    // More segments for round spheres (16x12 instead of 12x10)
+                    const geo = new THREE.SphereGeometry(size, 16, 12);
                     const puff = new THREE.Mesh(geo, cloudMat);
                     
                     puff.position.set(
                         (Math.random() - 0.5) * 80,
-                        Math.random() * 20,
+                        Math.random() * 10,
                         (Math.random() - 0.5) * 80
                     );
-                    puff.scale.y = 0.4;
+                    // Natural cloud puff scaling - slightly flattened but not disks!
+                    puff.scale.set(
+                        0.85 + Math.random() * 0.3,
+                        0.7 + Math.random() * 0.3,  // Slightly flattened (real clouds)
+                        0.85 + Math.random() * 0.3
+                    );
                     cloudGroup.add(puff);
                 }
                 
