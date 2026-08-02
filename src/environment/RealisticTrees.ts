@@ -95,18 +95,18 @@ export class RealisticTrees {
       const x = (Math.random() - 0.5) * terrainSize;
       const z = (Math.random() - 0.5) * terrainSize;
 
-      if (this._inAirportZone(x, z, 150)) continue;
+      if (this._inAirportZone(x, z, 200)) continue;
 
       const h = this._getHeight(x, z);
-      // Only place trees on very flat, low terrain (2-30m) to prevent floating appearance
-      if (h < 2 || h > 30) continue;
+      // Only place on very flat low terrain (0.5-20m) to prevent floating
+      if (h < 0.5 || h > 20) continue;
       // Check terrain slope - skip if steep (trees would look floating)
       const hLeft = this._getHeight(x - 5, z);
       const hRight = this._getHeight(x + 5, z);
       const hFront = this._getHeight(x, z - 5);
       const hBack = this._getHeight(x, z + 5);
       const slope = Math.abs(hLeft - hRight) + Math.abs(hFront - hBack);
-      if (slope > 3) continue; // Skip steep terrain
+      if (slope > 2) continue; // Skip steep terrain
 
       const scale = 1.5 + Math.random() * 1.2; // Increased from 0.7-1.3 to 1.5-2.7 for better visibility
       const rotation = Math.random() * Math.PI * 2;
@@ -205,18 +205,18 @@ export class RealisticTrees {
       const x = (Math.random() - 0.5) * terrainSize;
       const z = (Math.random() - 0.5) * terrainSize;
 
-      if (this._inAirportZone(x, z, 120)) continue;
+      if (this._inAirportZone(x, z, 180)) continue;
 
       const h = this._getHeight(x, z);
-      // Only place on flat low terrain (2-25m)
-      if (h < 2 || h > 25) continue;
+      // Only place on flat low terrain (0.5-15m)
+      if (h < 0.5 || h > 15) continue;
       // Check terrain slope
       const hLeft = this._getHeight(x - 5, z);
       const hRight = this._getHeight(x + 5, z);
       const hFront = this._getHeight(x, z - 5);
       const hBack = this._getHeight(x, z + 5);
       const slope = Math.abs(hLeft - hRight) + Math.abs(hFront - hBack);
-      if (slope > 3) continue;
+      if (slope > 2) continue;
 
       const scale = 1.5 + Math.random() * 1.2; // Increased from 0.7-1.3 to 1.5-2.7 for better visibility
       const rotation = Math.random() * Math.PI * 2;
@@ -299,18 +299,18 @@ export class RealisticTrees {
       const x = (Math.random() - 0.5) * terrainSize;
       const z = (Math.random() - 0.5) * terrainSize;
 
-      if (this._inAirportZone(x, z, 80)) continue;
+      if (this._inAirportZone(x, z, 150)) continue;
 
       const h = this._getHeight(x, z);
-      // Only on flat low terrain (1-20m)
-      if (h < 1 || h > 20) continue;
+      // Only on very flat low terrain (0.5-10m)
+      if (h < 0.5 || h > 10) continue;
       // Check terrain slope
       const hLeft = this._getHeight(x - 5, z);
       const hRight = this._getHeight(x + 5, z);
       const hFront = this._getHeight(x, z - 5);
       const hBack = this._getHeight(x, z + 5);
       const slope = Math.abs(hLeft - hRight) + Math.abs(hFront - hBack);
-      if (slope > 2) continue;
+      if (slope > 1.5) continue;
 
       const scale = 1.2 + Math.random() * 1.5; // Increased from 0.5-1.3 to 1.2-2.7 for better visibility
 
@@ -379,11 +379,11 @@ export class RealisticTrees {
       const x = (Math.random() - 0.5) * terrainSize;
       const z = (Math.random() - 0.5) * terrainSize;
 
-      if (this._inAirportZone(x, z, 80)) continue;
+      if (this._inAirportZone(x, z, 120)) continue;
 
       const h = this._getHeight(x, z);
-      // Only on very flat low terrain (1-15m)
-      if (h < 1 || h > 15) continue;
+      // Only on very flat low terrain (0.5-8m)
+      if (h < 0.5 || h > 8) continue;
 
       const size = 8 + Math.random() * 18;
 

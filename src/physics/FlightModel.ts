@@ -73,9 +73,11 @@ export class FlightModel {
       const velForward = this._velocityDir.dot(this._forward);
       const velUp = this._velocityDir.dot(this._up);
 
-      // AoA = arcsin of the vertical component relative to the aircraft
-      // Positive AoA = nose above flight path (climbing attitude)
-      aoa = Math.atan2(velUp, velForward);
+      // AoA = angle between relative wind (-velocity) and aircraft forward axis
+      // Positive AoA = relative wind from below = nose above flight path = lift
+      // When nose is up, velocity is BELOW the aircraft axis → velUp is negative
+      // We negate velUp so that pulling up gives positive AoA → positive lift
+      aoa = Math.atan2(-velUp, velForward);
 
       // Clamp AoA to reasonable range
       aoa = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, aoa));
@@ -171,7 +173,8 @@ export class FlightModel {
     // ============================================================
     if (speed > 5) {
       // Get bank angle (roll angle around forward axis)
-      const bankAngle = aircraft.rotation.x;
+      // With Euler order 'YXZ', rotation.z is the roll/bank angle
+      const bankAngle = aircraft.rotation.z;
 
       // Horizontal turn rate: stronger response to bank angle
       const turnRate = Math.sin(bankAngle) * (GRAVITY / speed) * 2.5; // Increased from 0.8 to 2.5
@@ -215,8 +218,10 @@ export class FlightModel {
     }
 
     // Input mapping
-    const rollInput = (controls.rollRight ? 1 : 0) - (controls.rollLeft ? 1 : 0);
-    const pitchInput = (controls.pitchUp ? 1 : 0) - (controls.pitchDown ? 1 : 0);
+    // Roll: invert so A=left wing down (negative roll), D=right wing down (positive roll)
+    const rollInput = (controls.rollLeft ? 1 : 0) - (controls.rollRight ? 1 : 0);
+    // Negate pitch: pitchUp (S key) should raise nose → negative rotation around right axis
+    const pitchInput = (controls.pitchDown ? 1 : 0) - (controls.pitchUp ? 1 : 0);
     const yawInput = (controls.yawRight ? 1 : 0) - (controls.yawLeft ? 1 : 0);
 
     // Angular rates (rad/s) - apply full rate at cruise, scaled by controlFactor

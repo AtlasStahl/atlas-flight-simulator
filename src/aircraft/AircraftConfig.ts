@@ -46,7 +46,7 @@ export const AIRCRAFT_CONFIGS: Record<string, AircraftConfig> = {
     pitchRate: 60,
     yawRate: 30,
     throttleResponse: 0.4,
-    maxThrust: 7000,
+    maxThrust: 1300,
     mass: 1100,
     wingArea: 16.2,
     dragCoefficient: 0.03,
@@ -65,7 +65,7 @@ export const AIRCRAFT_CONFIGS: Record<string, AircraftConfig> = {
     pitchRate: 40,
     yawRate: 20,
     throttleResponse: 0.6,
-    maxThrust: 280000,
+    maxThrust: 242000,
     mass: 53000,
     wingArea: 125,
     dragCoefficient: 0.025,
@@ -80,11 +80,11 @@ export const AIRCRAFT_CONFIGS: Record<string, AircraftConfig> = {
     maxSpeed: 180,        // ~650 km/h
     rotateSpeed: 39,      // ~140 km/h
     maxClimbRate: 15,     // ~3000 ft/min
-    rollRate: 400,
-    pitchRate: 200,
+    rollRate: 300,
+    pitchRate: 120,
     yawRate: 80,
-    throttleResponse: 0.9,
-    maxThrust: 12000,
+    throttleResponse: 0.7,
+    maxThrust: 2500,
     mass: 700,
     wingArea: 10.2,
     dragCoefficient: 0.02,

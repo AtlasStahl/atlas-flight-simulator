@@ -120,29 +120,29 @@ export class Terrain {
     // Airport flat zone - larger and smoother
     const airportHalfX = 1000;
     const airportHalfZ = 200;
-    const blendWidth = 400;
+    const blendWidth = 200;
 
     const distX = Math.abs(x);
     const distZ = Math.abs(z);
 
     // Inside airport: perfectly flat
-    if (distX < airportHalfX - blendWidth && distZ < airportHalfZ - blendWidth) {
+    if (distX < airportHalfX && distZ < airportHalfZ) {
       return 0;
     }
 
     // Blend zone: smooth transition from flat to terrain
     let blendX = 0;
     let blendZ = 0;
-    if (distX >= airportHalfX - blendWidth && distX < airportHalfX) {
-      blendX = (distX - (airportHalfX - blendWidth)) / blendWidth;
+    if (distX >= airportHalfX && distX < airportHalfX + blendWidth) {
+      blendX = (distX - airportHalfX) / blendWidth;
       blendX = smoothstep(blendX);
-    } else if (distX >= airportHalfX) {
+    } else if (distX >= airportHalfX + blendWidth) {
       blendX = 1;
     }
-    if (distZ >= airportHalfZ - blendWidth && distZ < airportHalfZ) {
-      blendZ = (distZ - (airportHalfZ - blendWidth)) / blendWidth;
+    if (distZ >= airportHalfZ && distZ < airportHalfZ + blendWidth) {
+      blendZ = (distZ - airportHalfZ) / blendWidth;
       blendZ = smoothstep(blendZ);
-    } else if (distZ >= airportHalfZ) {
+    } else if (distZ >= airportHalfZ + blendWidth) {
       blendZ = 1;
     }
 
