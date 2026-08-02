@@ -114,7 +114,9 @@ export class Terrain {
     // Evict oldest entry if cache is full (simple LRU approximation)
     if (this._heightCache.size >= this._maxCacheSize) {
       const firstKey = this._heightCache.keys().next().value;
-      this._heightCache.delete(firstKey);
+      if (firstKey !== undefined) {
+        this._heightCache.delete(firstKey);
+      }
     }
     this._heightCache.set(key, h);
     return h;
@@ -439,7 +441,7 @@ export class Terrain {
   // ----------------------------------------------------------
   //  Update
   // ----------------------------------------------------------
-  update(dt: number) {
+  update(_dt: number) {
     // Animate water (gentle wave)
     this._waterGroup.children.forEach((w, i) => {
       w.position.y += Math.sin(performance.now() * 0.001 + i) * 0.002;

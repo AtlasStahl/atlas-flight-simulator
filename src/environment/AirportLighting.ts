@@ -19,7 +19,7 @@ export class AirportLighting {
                     new THREE.SphereGeometry(0.15, 8, 8),
                     new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 2, transparent: true, opacity: 0.9 })
                 );
-                bulb.position.set(x, 0.3, z);
+                bulb.position.set(x, 1.7, z); // y=1.7 = slightly above runway surface (1.5)
                 this._lights.add(bulb);
             }
         }
@@ -36,7 +36,7 @@ export class AirportLighting {
                     emissiveIntensity: 3, transparent: true, opacity: 0.9
                 })
             );
-            light.position.set(bounds.x1 - 50, 0.5 + i * 0.3, bounds.z2 + 20);
+            light.position.set(bounds.x1 - 50, 1.8 + i * 0.3, bounds.z2 + 20); // y=1.8+ (above runway)
             this._lights.add(light);
         }
     }

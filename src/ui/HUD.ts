@@ -44,7 +44,7 @@ export class HUD {
     textColor: '#cccccc',
     accentColor: '#00cc44',
     stallColor: '#ff6600',
-    font: 'Arial, sans-serif'
+    font: '\'Helvetica Neue\', Arial, sans-serif'
   };
 
   // Scale per aircraft type
@@ -87,33 +87,30 @@ export class HUD {
 
     // MENU button (top-right corner)
     this._menuBtn = document.createElement('button');
-    this._menuBtn.textContent = '☰ MENU';
+    this._menuBtn.textContent = 'MENU';
     this._menuBtn.style.cssText = `
       position: absolute;
       top: 16px;
       right: 16px;
       z-index: 200;
       pointer-events: auto;
-      padding: 8px 18px;
-      font-size: 12px;
-      font-weight: 600;
-      font-family: 'Segoe UI', Tahoma, sans-serif;
-      letter-spacing: 0.5px;
-      background: rgba(8, 12, 24, 0.85);
+      padding: 6px 14px;
+      font-size: 11px;
+      font-weight: 500;
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+      letter-spacing: 1px;
+      background: rgba(8, 12, 24, 0.8);
       color: #ffffff;
-      border: 1px solid rgba(255,255,255,0.15);
-      border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 4px;
       cursor: pointer;
-      backdrop-filter: blur(10px);
-      transition: all 0.15s ease;
+      transition: background 0.15s ease;
     `;
     this._menuBtn.addEventListener('mouseenter', () => {
-      this._menuBtn.style.background = 'rgba(0, 120, 200, 0.7)';
-      this._menuBtn.style.borderColor = 'rgba(100, 200, 255, 0.6)';
+      this._menuBtn.style.background = 'rgba(56, 56, 255, 0.6)';
     });
     this._menuBtn.addEventListener('mouseleave', () => {
-      this._menuBtn.style.background = 'rgba(8, 12, 24, 0.85)';
-      this._menuBtn.style.borderColor = 'rgba(255,255,255,0.15)';
+      this._menuBtn.style.background = 'rgba(8, 12, 24, 0.8)';
     });
     this._menuBtn.addEventListener('click', () => {
       this._onMenuCallback();
@@ -122,7 +119,7 @@ export class HUD {
 
     // Camera button (top-center)
     this._cameraBtn = document.createElement('button');
-    this._cameraBtn.textContent = '📷 KAMERA';
+    this._cameraBtn.textContent = 'KAMERA';
     this._cameraBtn.style.cssText = `
       position: absolute;
       top: 16px;
@@ -130,26 +127,25 @@ export class HUD {
       transform: translateX(-50%);
       z-index: 200;
       pointer-events: auto;
-      padding: 8px 18px;
-      font-size: 12px;
-      font-weight: 600;
-      font-family: 'Segoe UI', Tahoma, sans-serif;
-      letter-spacing: 0.5px;
-      background: rgba(8, 12, 24, 0.85);
-      color: #00ccff;
-      border: 1px solid rgba(0, 204, 255, 0.3);
-      border-radius: 6px;
+      padding: 6px 14px;
+      font-size: 11px;
+      font-weight: 500;
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+      letter-spacing: 1px;
+      background: rgba(8, 12, 24, 0.8);
+      color: #3838FF;
+      border: 1px solid rgba(56, 56, 255, 0.25);
+      border-radius: 4px;
       cursor: pointer;
-      backdrop-filter: blur(10px);
-      transition: all 0.15s ease;
+      transition: background 0.15s ease;
     `;
     this._cameraBtn.addEventListener('mouseenter', () => {
-      this._cameraBtn.style.background = 'rgba(0, 120, 200, 0.7)';
-      this._cameraBtn.style.borderColor = 'rgba(100, 200, 255, 0.6)';
+      this._cameraBtn.style.background = 'rgba(56, 56, 255, 0.5)';
+      this._cameraBtn.style.color = '#ffffff';
     });
     this._cameraBtn.addEventListener('mouseleave', () => {
-      this._cameraBtn.style.background = 'rgba(8, 12, 24, 0.85)';
-      this._cameraBtn.style.borderColor = 'rgba(0, 204, 255, 0.3)';
+      this._cameraBtn.style.background = 'rgba(8, 12, 24, 0.8)';
+      this._cameraBtn.style.color = '#3838FF';
     });
     this._cameraBtn.addEventListener('click', () => {
       this._onCameraCallback?.();
@@ -168,7 +164,8 @@ export class HUD {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     this._canvas.width = window.innerWidth * dpr;
     this._canvas.height = window.innerHeight * dpr;
-    this._ctx.scale(dpr, dpr);
+    // Reset transform before re-scaling
+    this._ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     const w = window.innerWidth;
     const h = window.innerHeight;
@@ -207,7 +204,7 @@ export class HUD {
     onGround: boolean,
     crashed: boolean,
     missionStatus?: { totalRings: number; ringsPassed: number; score: number; timeElapsed: number; completed: boolean },
-    cameraMode?: string,
+    _cameraMode?: string,
     combatStatus?: { wave: number; score: number; playerHealth: number; maxPlayerHealth: number; enemiesAlive: number; totalEnemies: number }
   ) {
     if (!this._visible) return;
@@ -269,7 +266,13 @@ export class HUD {
   }
 
   updateCameraButton(mode: string): void {
-    this._cameraBtn.textContent = `📷 ${mode}`;
+    const cameraLabels: Record<string, string> = {
+      chase: 'VERFOLGUNG',
+      cockpit: 'COCKPIT',
+      cinematic: 'KINO',
+      tower: 'TURM'
+    };
+    this._cameraBtn.textContent = `${cameraLabels[mode] || mode}`;
   }
 
   private applyAircraftTheme(): void {
@@ -280,7 +283,7 @@ export class HUD {
           needle: '#e8e8e8', needleAccent: '#ff3333',
           tickColor: '#ffffff', textColor: '#cccccc',
           accentColor: '#00cc44', stallColor: '#ff6600',
-          font: 'Arial, sans-serif'
+          font: '\'Helvetica Neue\', Arial, sans-serif'
         };
         this._maxSpeed = 400; this._maxAlt = 5000; this._stallSpeed = 108;
         break;
@@ -290,7 +293,7 @@ export class HUD {
           needle: '#ffffff', needleAccent: '#0088ff',
           tickColor: '#dddddd', textColor: '#bbbbbb',
           accentColor: '#00aaff', stallColor: '#ff8800',
-          font: 'Helvetica, sans-serif'
+          font: '\'Helvetica Neue\', Arial, sans-serif'
         };
         this._maxSpeed = 900; this._maxAlt = 12000; this._stallSpeed = 198;
         break;
@@ -300,7 +303,7 @@ export class HUD {
           needle: '#ff4444', needleAccent: '#ff4444',
           tickColor: '#ffffff', textColor: '#dddddd',
           accentColor: '#ff6600', stallColor: '#ff0000',
-          font: 'Arial, sans-serif'
+          font: '\'Helvetica Neue\', Arial, sans-serif'
         };
         this._maxSpeed = 700; this._maxAlt = 6000; this._stallSpeed = 90;
         break;
@@ -310,7 +313,7 @@ export class HUD {
           needle: '#00ff44', needleAccent: '#00ff44',
           tickColor: '#00ff44', textColor: '#00cc33',
           accentColor: '#00ff88', stallColor: '#ff4400',
-          font: 'Courier New, monospace'
+          font: '\'Helvetica Neue\', Arial, sans-serif'
         };
         this._maxSpeed = 1400; this._maxAlt = 15000; this._stallSpeed = 144;
         break;
@@ -320,7 +323,7 @@ export class HUD {
           needle: '#ffcc00', needleAccent: '#ffcc00',
           tickColor: '#ffcc00', textColor: '#cccccc',
           accentColor: '#ffaa00', stallColor: '#ff4400',
-          font: 'Arial, sans-serif'
+          font: '\'Helvetica Neue\', Arial, sans-serif'
         };
         this._maxSpeed = 1400; this._maxAlt = 15000; this._stallSpeed = 162;
         break;
@@ -330,7 +333,7 @@ export class HUD {
           needle: '#e8e8e8', needleAccent: '#ff3333',
           tickColor: '#ffffff', textColor: '#cccccc',
           accentColor: '#00cc44', stallColor: '#ff6600',
-          font: 'Arial, sans-serif'
+          font: '\'Helvetica Neue\', Arial, sans-serif'
         };
         this._maxSpeed = 400; this._maxAlt = 5000; this._stallSpeed = 108;
     }
@@ -494,6 +497,20 @@ export class HUD {
     const redEnd = startAngle + sweepAngle;
     this.drawArc(x, y, r - 3, redStart, redEnd, '#ff3333', 3);
 
+    // Stall warning — pulsing warning when near or below stall speed
+    const ctx = this._ctx;
+    const isNearStall = speedKmh < stallSpeed * 1.15;
+    if (isNearStall) {
+      const pulse = Math.sin(performance.now() / 200) * 0.4 + 0.6;
+      ctx.save();
+      ctx.globalAlpha = pulse;
+      ctx.fillStyle = this._theme.stallColor;
+      ctx.font = `bold 16px ${this._theme.font}`;
+      ctx.textAlign = 'center';
+      ctx.fillText('⚠ STALL', x, y + r + 20);
+      ctx.restore();
+    }
+
     // Needle
     const clampedSpeed = Math.max(0, Math.min(maxSpeed, speedKmh));
     const needleAngle = startAngle + (clampedSpeed / maxSpeed) * sweepAngle;
@@ -501,11 +518,10 @@ export class HUD {
     this.drawAnalogNeedle(x, y, needleAngle, r - 18, isAccent);
 
     // Label
-    const ctx = this._ctx;
     ctx.fillStyle = this._theme.textColor;
     ctx.font = `bold 9px ${this._theme.font}`;
     ctx.textAlign = 'center';
-    ctx.fillText('KTS', x, y + r - 40);
+    ctx.fillText('KM/H', x, y + r - 40);
 
     // Digital readout at bottom
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
@@ -513,7 +529,7 @@ export class HUD {
     ctx.strokeStyle = 'rgba(255,255,255,0.2)';
     ctx.lineWidth = 0.5;
     ctx.strokeRect(x - 22, y + r - 30, 44, 16);
-    ctx.fillStyle = this._theme.accentColor;
+    ctx.fillStyle = isNearStall ? this._theme.stallColor : this._theme.accentColor;
     ctx.font = `bold 11px ${this._theme.font}`;
     ctx.fillText(Math.round(clampedSpeed).toString(), x, y + r - 18);
   }
@@ -752,7 +768,7 @@ export class HUD {
     ctx.beginPath();
     ctx.roundRect(x, y, 140, 44, 8);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(80, 160, 220, 0.3)';
+    ctx.strokeStyle = 'rgba(56, 56, 255, 0.3)';
     ctx.lineWidth = 1;
     ctx.stroke();
 
@@ -760,46 +776,42 @@ export class HUD {
     let textColor: string;
 
     if (crashed) {
-      statusText = 'CRASHED';
+      statusText = 'ABGESTÜRZT';
       textColor = '#ff4444';
     } else if (onGround) {
-      statusText = 'ON GROUND';
+      statusText = 'AM BODEN';
       textColor = '#ffcc00';
     } else {
-      statusText = 'AIRBORNE';
+      statusText = 'FLUG';
       textColor = '#00cc44';
     }
 
-    // Dot indicator
-    ctx.save();
-    ctx.shadowColor = textColor;
-    ctx.shadowBlur = 8;
+    // Dot indicator (no glow, Rams 10)
     ctx.beginPath();
     ctx.arc(x + 16, y + 22, 5, 0, Math.PI * 2);
     ctx.fillStyle = textColor;
     ctx.fill();
-    ctx.restore();
 
     ctx.fillStyle = textColor;
-    ctx.font = 'bold 12px Segoe UI, sans-serif';
+    ctx.font = 'bold 12px \'Helvetica Neue\', Arial, sans-serif';
     ctx.textAlign = 'left';
     ctx.fillText(statusText, x + 28, y + 26);
 
     let subText: string;
     if (crashed) {
-      subText = 'Press ESC to reset';
+      subText = 'ESC drücken zum Neustart';
     } else if (onGround) {
-      subText = 'Throttle up & pitch back';
+      subText = 'Schub erhöhen & Nase hoch';
     } else {
       switch (this._gameMode) {
-        case 'combat': subText = 'Space/V to shoot enemies!'; break;
-        case 'ring_mission': subText = 'Fly through rings!'; break;
-        default: subText = 'Explore freely!';
+        case 'combat': subText = 'Space/V zum Schießen!'; break;
+        case 'ring_mission': subText = 'Durch die Ringe fliegen!'; break;
+        default: subText = 'Frei erkunden!';
       }
     }
 
-    ctx.fillStyle = '#5577aa';
-    ctx.font = '9px Segoe UI, sans-serif';
+    ctx.fillStyle = '#575756';
+    ctx.font = '9px \'Helvetica Neue\', Arial, sans-serif';
     ctx.fillText(subText, x + 16, y + 40);
   }
 
@@ -816,15 +828,15 @@ export class HUD {
     ctx.beginPath();
     ctx.roundRect(x, y, panelW, panelH, 8);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(80, 160, 220, 0.3)';
+    ctx.strokeStyle = 'rgba(56, 56, 255, 0.3)';
     ctx.lineWidth = 1;
     ctx.stroke();
 
     // Throttle bar
-    ctx.fillStyle = '#6688aa';
-    ctx.font = '10px Segoe UI, sans-serif';
+    ctx.fillStyle = '#B2B2B2';
+    ctx.font = '10px \'Helvetica Neue\', Arial, sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText('THROTTLE', x + 12, y + 24);
+    ctx.fillText('SCHUB', x + 12, y + 24);
 
     const barX = x + 75;
     const barY = y + 14;
@@ -852,23 +864,23 @@ export class HUD {
     ctx.stroke();
 
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 11px Segoe UI, sans-serif';
+    ctx.font = 'bold 11px \'Helvetica Neue\', Arial, sans-serif';
     ctx.textAlign = 'right';
     ctx.fillText(`${Math.round(throttle * 100)}%`, x + panelW - 12, y + 24);
     ctx.textAlign = 'left';
 
     // VSI
-    ctx.fillStyle = '#6688aa';
-    ctx.font = '10px Segoe UI, sans-serif';
-    ctx.fillText('VERT. SPEED', x + 12, y + 58);
+    ctx.fillStyle = '#B2B2B2';
+    ctx.font = '10px \'Helvetica Neue\', Arial, sans-serif';
+    ctx.fillText('STEIGEN', x + 12, y + 58);
     const vsiColor = verticalSpeed > 0.5 ? '#00cc44' : verticalSpeed < -0.5 ? '#ff6644' : '#ffffff';
     ctx.fillStyle = vsiColor;
-    ctx.font = 'bold 14px Segoe UI, sans-serif';
+    ctx.font = 'bold 14px \'Helvetica Neue\', Arial, sans-serif';
     const vsiSign = verticalSpeed >= 0 ? '+' : '';
     ctx.fillText(`${vsiSign}${verticalSpeed.toFixed(1)} m/s`, x + 75, y + 58);
 
     // Separator
-    ctx.strokeStyle = 'rgba(80, 160, 220, 0.15)';
+    ctx.strokeStyle = 'rgba(56, 56, 255, 0.15)';
     ctx.lineWidth = 0.5;
     ctx.beginPath();
     ctx.moveTo(x + 12, y + 72);
@@ -880,8 +892,8 @@ export class HUD {
       cessna: 'Cessna 172', boeing: 'Boeing 737', extra: 'Extra 300',
       f16: 'F-16 Fighting Falcon', su27: 'Su-27 Flanker'
     };
-    ctx.fillStyle = 'rgba(150, 180, 220, 0.5)';
-    ctx.font = '9px Segoe UI, sans-serif';
+    ctx.fillStyle = '#575756';
+    ctx.font = '9px \'Helvetica Neue\', Arial, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText(aircraftNames[this._aircraftType] || 'Unknown', x + panelW / 2, y + 88);
   }
@@ -897,29 +909,29 @@ export class HUD {
     ctx.beginPath();
     ctx.roundRect(x, y, panelW, panelH, 8);
     ctx.fill();
-    ctx.strokeStyle = missionStatus.completed ? 'rgba(0, 180, 90, 0.5)' : 'rgba(80, 160, 220, 0.3)';
+    ctx.strokeStyle = missionStatus.completed ? 'rgba(0, 180, 90, 0.5)' : 'rgba(56, 56, 255, 0.3)';
     ctx.lineWidth = 1;
     ctx.stroke();
 
     ctx.textAlign = 'left';
-    ctx.fillStyle = '#6688aa';
-    ctx.font = '10px Segoe UI, sans-serif';
-    ctx.fillText('RINGS', x + 12, y + 18);
+    ctx.fillStyle = '#B2B2B2';
+    ctx.font = '10px \'Helvetica Neue\', Arial, sans-serif';
+    ctx.fillText('RINGE', x + 12, y + 18);
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 13px Segoe UI, sans-serif';
+    ctx.font = 'bold 13px \'Helvetica Neue\', Arial, sans-serif';
     ctx.fillText(`${missionStatus.ringsPassed} / ${missionStatus.totalRings}`, x + 65, y + 18);
 
-    ctx.fillStyle = '#6688aa';
-    ctx.font = '10px Segoe UI, sans-serif';
-    ctx.fillText('SCORE', x + 12, y + 36);
+    ctx.fillStyle = '#B2B2B2';
+    ctx.font = '10px \'Helvetica Neue\', Arial, sans-serif';
+    ctx.fillText('PUNKTE', x + 12, y + 36);
     ctx.fillStyle = '#ffcc00';
-    ctx.font = 'bold 13px Segoe UI, sans-serif';
+    ctx.font = 'bold 13px \'Helvetica Neue\', Arial, sans-serif';
     ctx.fillText(`${missionStatus.score}`, x + 65, y + 36);
 
     if (missionStatus.completed) {
       ctx.fillStyle = '#00cc44';
-      ctx.font = 'bold 11px Segoe UI, sans-serif';
-      ctx.fillText(`✓ COMPLETE  ${Math.floor(missionStatus.timeElapsed)}s`, x + 12, y + 55);
+      ctx.font = 'bold 11px \'Helvetica Neue\', Arial, sans-serif';
+      ctx.fillText(`✓ GESCHAFFT  ${Math.floor(missionStatus.timeElapsed)}s`, x + 12, y + 55);
     }
   }
 
@@ -950,19 +962,19 @@ export class HUD {
     ctx.stroke();
 
     ctx.fillStyle = '#ff6644';
-    ctx.font = 'bold 11px Segoe UI, sans-serif';
+    ctx.font = 'bold 11px \'Helvetica Neue\', Arial, sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText(`WAVE ${combat.wave}`, x + 12, y + 20);
+    ctx.fillText(`WELLE ${combat.wave}`, x + 12, y + 20);
 
-    ctx.fillStyle = '#6688aa';
-    ctx.font = '10px Segoe UI, sans-serif';
-    ctx.fillText('SCORE', x + 12, y + 40);
+    ctx.fillStyle = '#B2B2B2';
+    ctx.font = '10px \'Helvetica Neue\', Arial, sans-serif';
+    ctx.fillText('PUNKTE', x + 12, y + 40);
     ctx.fillStyle = '#ffcc00';
-    ctx.font = 'bold 13px Segoe UI, sans-serif';
+    ctx.font = 'bold 13px \'Helvetica Neue\', Arial, sans-serif';
     ctx.fillText(`${combat.score}`, x + 65, y + 40);
 
-    ctx.fillStyle = '#6688aa';
-    ctx.font = '10px Segoe UI, sans-serif';
+    ctx.fillStyle = '#B2B2B2';
+    ctx.font = '10px \'Helvetica Neue\', Arial, sans-serif';
     ctx.fillText('HP', x + 12, y + 62);
 
     const barX = x + 38;
@@ -982,20 +994,20 @@ export class HUD {
     ctx.strokeRect(barX, barY, barW, barH);
 
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 9px Segoe UI, sans-serif';
+    ctx.font = 'bold 9px \'Helvetica Neue\', Arial, sans-serif';
     ctx.textAlign = 'right';
     ctx.fillText(`${Math.round(combat.playerHealth)}/${combat.maxPlayerHealth}`, x + panelW - 12, y + 62);
     ctx.textAlign = 'left';
 
-    ctx.fillStyle = '#6688aa';
-    ctx.font = '10px Segoe UI, sans-serif';
-    ctx.fillText('ENEMIES', x + 12, y + 88);
+    ctx.fillStyle = '#B2B2B2';
+    ctx.font = '10px \'Helvetica Neue\', Arial, sans-serif';
+    ctx.fillText('FEINDE', x + 12, y + 88);
     ctx.fillStyle = '#ff4444';
-    ctx.font = 'bold 13px Segoe UI, sans-serif';
+    ctx.font = 'bold 13px \'Helvetica Neue\', Arial, sans-serif';
     ctx.fillText(`${combat.enemiesAlive} / ${combat.totalEnemies}`, x + 65, y + 88);
 
     ctx.strokeStyle = 'rgba(220, 80, 80, 0.3)';
-    ctx.font = '9px Segoe UI, sans-serif';
-    ctx.fillText('⊕ TARGET', x + 12, y + 108);
+    ctx.font = '9px \'Helvetica Neue\', Arial, sans-serif';
+    ctx.fillText('⊕ ZIEL', x + 12, y + 108);
   }
 }

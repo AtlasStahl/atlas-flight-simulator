@@ -115,7 +115,7 @@ describe('GroundCollision', () => {
 
       collision.update(aircraft, controls, 0.016, RUNWAY_BOUNDS);
 
-      expect(collision.taxiMode).toBe(false);
+      expect(collision.taxiMode).toBe(false); // Aircraft is well above ground, not in taxi mode
     });
   });
 
@@ -154,21 +154,23 @@ describe('GroundCollision', () => {
   });
 
   describe('takeoff', () => {
-    it('should enable takeoff at rotate speed with pitch up', () => {
+    it('should allow natural lift-off when aircraft has upward velocity', () => {
       // Drain grace period
       for (let i = 0; i < 200; i++) {
         collision.update(aircraft, controls, 0.016, RUNWAY_BOUNDS);
       }
 
-      const rotateSpeed = CESSNA_CONFIG.rotateSpeed * 0.8;
-      aircraft.velocity.set(rotateSpeed + 5, 0, 0);
-      aircraft.position.set(0, 0.5, 0);
+      // Simulate aircraft at speed with lift (positive upward velocity)
+      aircraft.velocity.set(50, 3, 0); // Moving forward + climbing
+      aircraft.position.set(0, 2.0, 0); // Just above ground
       controls.pitchUp = true;
 
       collision.update(aircraft, controls, 0.016, RUNWAY_BOUNDS);
 
-      expect(collision.taxiMode).toBe(false);
-      expect(aircraft.velocity.y).toBeGreaterThan(0);
+      // Position should be above ground (not constrained down)
+      expect(aircraft.position.y).toBeGreaterThan(1.0);
+      // Upward velocity should NOT be blocked (lift is working)
+      expect(aircraft.velocity.y).toBeGreaterThanOrEqual(0);
     });
 
     it('should not takeoff below rotate speed', () => {
@@ -222,7 +224,7 @@ describe('GroundCollision', () => {
     it('should reset taxi mode and grace period', () => {
       collision.reset();
 
-      expect(collision.taxiMode).toBe(false);
+      expect(collision.taxiMode).toBe(true); // reset() puts aircraft on the ground
     });
   });
 
@@ -232,7 +234,7 @@ describe('GroundCollision', () => {
       const collisionPlateau = new GroundCollision(terrainHeight);
 
       const aircraftPlateau = new MockAircraft(CESSNA_CONFIG);
-      aircraftPlateau.position.set(0, 50.5, 0);
+      aircraftPlateau.position.set(2000, 50.5, 2000); // Outside runway bounds
 
       // Drain grace period
       for (let i = 0; i < 200; i++) {

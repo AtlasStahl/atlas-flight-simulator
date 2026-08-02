@@ -139,7 +139,7 @@ export class Runway {
           emissiveIntensity: 2
         });
         const light = new THREE.Mesh(lightGeo, lightMat);
-        light.position.set(-1500, 0.5, side * (35 + i * 3));
+        light.position.set(-1500, 1.5, side * (35 + i * 3));
         scene.add(light);
 
         // Point light for glow
@@ -163,7 +163,7 @@ export class Runway {
 
     for (let i = 0; i < 20; i++) {
       const light = new THREE.Mesh(approachLightGeo, approachLightMat);
-      light.position.set(-1500 - 50 - i * 20, 0.3, 0);
+      light.position.set(-1500 - 50 - i * 20, 1.5, 0);
       scene.add(light);
     }
   }

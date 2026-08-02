@@ -30,4 +30,9 @@ export class EventBus {
   clear(): void {
     this._listeners.clear();
   }
+
+  /** Alias for clear – releases all listeners */
+  dispose(): void {
+    this.clear();
+  }
 }

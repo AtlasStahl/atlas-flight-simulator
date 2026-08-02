@@ -26,7 +26,6 @@ export class AirportVehicles {
   private readonly lightFixtureMat = new THREE.MeshStandardMaterial({ color: 0xffffee, emissive: 0xffffcc, emissiveIntensity: 0.5, roughness: 0.2 });
   private readonly bridgeMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.5, metalness: 0.4 });
   private readonly bridgeDarkMat = new THREE.MeshStandardMaterial({ color: 0x777777, roughness: 0.5, metalness: 0.5 });
-  private readonly cargoMat = new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.6 });
   private readonly luggageMat = new THREE.MeshStandardMaterial({ color: 0x336699, roughness: 0.7 });
 
   constructor() {
@@ -177,8 +176,8 @@ export class AirportVehicles {
   // ============================================================
   private createPushbackTractors(scene: THREE.Scene) {
     const positions = [
-      { x: 80, z: 30, rotY: 0.3 },
-      { x: 100, z: 50, rotY: -0.2 },
+      { x: 80, z: 55, rotY: 0.3 },
+      { x: 100, z: 75, rotY: -0.2 },
     ];
 
     for (const pos of positions) {
@@ -383,8 +382,8 @@ export class AirportVehicles {
   // ============================================================
   private createServiceVans(scene: THREE.Scene) {
     const positions = [
-      { x: 60, z: 70, rotY: 0.8 },
-      { x: 75, z: 90, rotY: -0.4 },
+      { x: 60, z: 55, rotY: 0.8 },
+      { x: 75, z: 75, rotY: -0.4 },
     ];
 
     for (const pos of positions) {
@@ -557,7 +556,7 @@ export class AirportVehicles {
     // Wheels (6 – triple axle for large bus)
     this.addSixWheels(group, 0.5, 0.35, 2.8, 2, 0.5);
 
-    group.position.set(50, 0, 40);
+    group.position.set(50, 0, 60);
     group.rotation.y = 0.2;
     scene.add(group);
   }
@@ -662,10 +661,10 @@ export class AirportVehicles {
   // ============================================================
   private createGroundSigns(scene: THREE.Scene) {
     const positions = [
-      { x: -100, z: 50, rotY: 0, text: 'A' },
-      { x: -50, z: 50, rotY: 0, text: 'B' },
-      { x: 150, z: 50, rotY: Math.PI, text: 'C' },
-      { x: 250, z: 50, rotY: Math.PI, text: 'D' },
+      { x: -100, z: 60, rotY: 0, text: 'A' },
+      { x: -50, z: 60, rotY: 0, text: 'B' },
+      { x: 150, z: 60, rotY: Math.PI, text: 'C' },
+      { x: 250, z: 60, rotY: Math.PI, text: 'D' },
     ];
 
     for (const pos of positions) {
@@ -718,16 +717,17 @@ export class AirportVehicles {
   //  Light Poles (8x)
   // ============================================================
   private createLightPoles(scene: THREE.Scene) {
-    // Arrange around the airport perimeter
+    // Arrange around the airport perimeter - well outside runway bounds
+    // Runway: x=-800..800, z=-30..30
     const positions = [
-      { x: -300, z: -20 },
-      { x: -150, z: -20 },
-      { x: 0, z: -20 },
-      { x: 150, z: -20 },
-      { x: -300, z: 120 },
-      { x: -150, z: 120 },
-      { x: 0, z: 120 },
-      { x: 150, z: 120 },
+      { x: -300, z: -60 },
+      { x: -150, z: -60 },
+      { x: 0, z: -60 },
+      { x: 150, z: -60 },
+      { x: -300, z: 90 },
+      { x: -150, z: 90 },
+      { x: 0, z: 90 },
+      { x: 150, z: 90 },
     ];
 
     for (const pos of positions) {
@@ -788,12 +788,12 @@ export class AirportVehicles {
   // ============================================================
   private createBarriers(scene: THREE.Scene) {
     const positions = [
-      { x: -250, z: 100, rotY: 0 },
-      { x: -240, z: 100, rotY: 0 },
-      { x: -230, z: 100, rotY: 0 },
-      { x: 100, z: 150, rotY: Math.PI / 2 },
-      { x: 100, z: 160, rotY: Math.PI / 2 },
-      { x: 100, z: 170, rotY: Math.PI / 2 },
+      { x: -250, z: 60, rotY: 0 },
+      { x: -240, z: 60, rotY: 0 },
+      { x: -230, z: 60, rotY: 0 },
+      { x: 100, z: 80, rotY: Math.PI / 2 },
+      { x: 100, z: 90, rotY: Math.PI / 2 },
+      { x: 100, z: 100, rotY: Math.PI / 2 },
     ];
 
     for (const pos of positions) {
@@ -854,9 +854,9 @@ export class AirportVehicles {
   // ============================================================
   private createLuggageCarts(scene: THREE.Scene) {
     const positions = [
-      { x: 40, z: 60, rotY: 0.5 },
-      { x: 55, z: 65, rotY: 0.3 },
-      { x: 70, z: 55, rotY: -0.2 },
+      { x: 40, z: 80, rotY: 0.5 },
+      { x: 55, z: 85, rotY: 0.3 },
+      { x: 70, z: 75, rotY: -0.2 },
     ];
 
     for (const pos of positions) {

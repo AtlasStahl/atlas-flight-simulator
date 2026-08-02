@@ -33,6 +33,17 @@ export class RingObstacle {
   get passed(): boolean { return this._passed; }
   set passed(value: boolean) { this._passed = value; }
 
+  /** Dispose ring resources and remove from scene */
+  dispose(scene: THREE.Scene): void {
+    scene.remove(this._mesh);
+    this._mesh.geometry?.dispose();
+    if (Array.isArray(this._mesh.material)) {
+      this._mesh.material.forEach(m => m.dispose());
+    } else {
+      this._mesh.material?.dispose();
+    }
+  }
+
   // Check if aircraft has flown through this ring
   checkPass(aircraftPosition: THREE.Vector3, aircraftRadius: number = 3): boolean {
     if (this._passed) return false;

@@ -25,9 +25,30 @@ export class Aircraft {
   }
 
   private buildModel() {
-    // Clear existing model so this method is idempotent
+    // Clear existing model with proper disposal so this method is idempotent
     while (this._group.children.length > 0) {
-      this._group.remove(this._group.children[0]);
+      const child = this._group.children[0];
+      this._group.remove(child);
+      if (child instanceof THREE.Mesh) {
+        child.geometry.dispose();
+        if (Array.isArray(child.material)) {
+          child.material.forEach(m => m.dispose());
+        } else {
+          child.material.dispose();
+        }
+      }
+      if (child instanceof THREE.Group) {
+        child.traverse((node) => {
+          if (node instanceof THREE.Mesh) {
+            node.geometry.dispose();
+            if (Array.isArray(node.material)) {
+              node.material.forEach(m => m.dispose());
+            } else {
+              node.material.dispose();
+            }
+          }
+        });
+      }
     }
     this._propeller = null;
 
@@ -437,12 +458,11 @@ export class Aircraft {
 
     // Propeller blades (2-blade, tapered)
     for (let i = 0; i < 2; i++) {
-      // Blade (tapered from hub to tip)
+      // Blade (tapered from hub to tip) - position.y already places blades opposite
       const blade = new THREE.Mesh(
         new THREE.BoxGeometry(0.04 * s, 1.4 * s, 0.03 * s),
         propMat
       );
-      blade.rotation.x = (i * Math.PI) / 2;
       blade.position.y = i === 0 ? 0.7 * s : -0.7 * s;
       this._propeller.add(blade);
 

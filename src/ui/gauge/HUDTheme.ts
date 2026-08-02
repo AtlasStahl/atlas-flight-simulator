@@ -26,7 +26,7 @@ export const AIRCRAFT_THEMES: Record<string, { theme: HUDTheme; scale: HUDScale 
       needle: '#e8e8e8', needleAccent: '#ff3333',
       tickColor: '#ffffff', textColor: '#cccccc',
       accentColor: '#00cc44', stallColor: '#ff6600',
-      font: 'Arial, sans-serif'
+      font: '\'Helvetica Neue\', Arial, sans-serif'
     },
     scale: { maxSpeed: 400, maxAlt: 5000, stallSpeed: 108 }
   },
@@ -36,7 +36,7 @@ export const AIRCRAFT_THEMES: Record<string, { theme: HUDTheme; scale: HUDScale 
       needle: '#ffffff', needleAccent: '#0088ff',
       tickColor: '#dddddd', textColor: '#bbbbbb',
       accentColor: '#00aaff', stallColor: '#ff8800',
-      font: 'Helvetica, sans-serif'
+      font: '\'Helvetica Neue\', Arial, sans-serif'
     },
     scale: { maxSpeed: 900, maxAlt: 12000, stallSpeed: 198 }
   },
@@ -46,7 +46,7 @@ export const AIRCRAFT_THEMES: Record<string, { theme: HUDTheme; scale: HUDScale 
       needle: '#ff4444', needleAccent: '#ff4444',
       tickColor: '#ffffff', textColor: '#dddddd',
       accentColor: '#ff6600', stallColor: '#ff0000',
-      font: 'Arial, sans-serif'
+      font: '\'Helvetica Neue\', Arial, sans-serif'
     },
     scale: { maxSpeed: 700, maxAlt: 6000, stallSpeed: 90 }
   },
@@ -56,7 +56,7 @@ export const AIRCRAFT_THEMES: Record<string, { theme: HUDTheme; scale: HUDScale 
       needle: '#00ff44', needleAccent: '#00ff44',
       tickColor: '#00ff44', textColor: '#00cc33',
       accentColor: '#00ff88', stallColor: '#ff4400',
-      font: 'Courier New, monospace'
+      font: '\'Helvetica Neue\', Arial, sans-serif'
     },
     scale: { maxSpeed: 1400, maxAlt: 15000, stallSpeed: 144 }
   },
@@ -66,7 +66,7 @@ export const AIRCRAFT_THEMES: Record<string, { theme: HUDTheme; scale: HUDScale 
       needle: '#ffcc00', needleAccent: '#ffcc00',
       tickColor: '#ffcc00', textColor: '#cccccc',
       accentColor: '#ffaa00', stallColor: '#ff4400',
-      font: 'Arial, sans-serif'
+      font: '\'Helvetica Neue\', Arial, sans-serif'
     },
     scale: { maxSpeed: 1400, maxAlt: 15000, stallSpeed: 162 }
   }
@@ -78,7 +78,7 @@ export const DEFAULT_THEME: HUDTheme = {
   needle: '#e8e8e8', needleAccent: '#ff3333',
   tickColor: '#ffffff', textColor: '#cccccc',
   accentColor: '#00cc44', stallColor: '#ff6600',
-  font: 'Arial, sans-serif'
+  font: '\'Helvetica Neue\', Arial, sans-serif'
 };
 
 export const DEFAULT_SCALE: HUDScale = { maxSpeed: 400, maxAlt: 5000, stallSpeed: 108 };

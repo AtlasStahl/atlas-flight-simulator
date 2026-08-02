@@ -1,11 +1,17 @@
-import { HUDTheme } from './HUDTheme';
+import type { HUDTheme } from './HUDTheme';
 
 /** Common canvas drawing utilities for gauge instruments */
 export class GaugeRenderer {
+  private _ctx: CanvasRenderingContext2D;
+  public theme: HUDTheme;
+
   constructor(
-    private _ctx: CanvasRenderingContext2D,
-    public theme: HUDTheme
-  ) {}
+    ctx: CanvasRenderingContext2D,
+    theme: HUDTheme
+  ) {
+    this._ctx = ctx;
+    this.theme = theme;
+  }
 
   get accentColor(): string { return this.theme.accentColor; }
   get textColor(): string { return this.theme.textColor; }
@@ -24,7 +30,7 @@ export class GaugeRenderer {
 
     const bezelGrad = ctx.createRadialGradient(x - r * 0.2, y - r * 0.2, 0, x, y, r + 5);
     bezelGrad.addColorStop(0, '#666666');
-    bezelGrad.addColorStop(0.5, this._theme.bezel);
+    bezelGrad.addColorStop(0.5, this.theme.bezel);
     bezelGrad.addColorStop(1, '#222222');
     ctx.beginPath();
     ctx.arc(x, y, r + 5, 0, Math.PI * 2);
@@ -34,8 +40,8 @@ export class GaugeRenderer {
 
     // Gauge face
     const faceGrad = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, 0, x, y, r);
-    faceGrad.addColorStop(0, this._theme.faceHighlight);
-    faceGrad.addColorStop(1, this._theme.face);
+    faceGrad.addColorStop(0, this.theme.faceHighlight);
+    faceGrad.addColorStop(1, this.theme.face);
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fillStyle = faceGrad;
@@ -75,7 +81,7 @@ export class GaugeRenderer {
     ctx.beginPath();
     ctx.moveTo(x, y);
     ctx.lineTo(tipX, tipY);
-    ctx.strokeStyle = isAccent ? this._theme.needleAccent : this._theme.needle;
+    ctx.strokeStyle = isAccent ? this.theme.needleAccent : this.theme.needle;
     ctx.lineWidth = isAccent ? 3 : 2;
     ctx.lineCap = 'round';
     ctx.stroke();
@@ -84,7 +90,7 @@ export class GaugeRenderer {
     // Center pivot
     ctx.beginPath();
     ctx.arc(x, y, 6, 0, Math.PI * 2);
-    ctx.fillStyle = isAccent ? this._theme.needleAccent : '#888888';
+    ctx.fillStyle = isAccent ? this.theme.needleAccent : '#888888';
     ctx.fill();
     ctx.beginPath();
     ctx.arc(x, y, 3, 0, Math.PI * 2);
@@ -111,7 +117,7 @@ export class GaugeRenderer {
       ctx.beginPath();
       ctx.moveTo(x + Math.cos(angle) * outerR, y + Math.sin(angle) * outerR);
       ctx.lineTo(x + Math.cos(angle) * innerR, y + Math.sin(angle) * innerR);
-      ctx.strokeStyle = this._theme.tickColor;
+      ctx.strokeStyle = this.theme.tickColor;
       ctx.lineWidth = 1.5;
       ctx.stroke();
 
@@ -129,8 +135,8 @@ export class GaugeRenderer {
 
       // Number label
       const textR = r - 26;
-      ctx.fillStyle = this._theme.textColor;
-      ctx.font = `10px ${this._theme.font}`;
+      ctx.fillStyle = this.theme.textColor;
+      ctx.font = `10px ${this.theme.font}`;
       ctx.fillText(v.toString(), x + Math.cos(angle) * textR, y + Math.sin(angle) * textR);
     }
   }
@@ -154,7 +160,7 @@ export class GaugeRenderer {
     ctx.lineWidth = 0.5;
     ctx.strokeRect(x - 22, y, 44, 16);
     ctx.fillStyle = color;
-    ctx.font = `bold 11px ${this._theme.font}`;
+    ctx.font = `bold 11px ${this.theme.font}`;
     ctx.textAlign = 'center';
     ctx.fillText(value, x, y + 12);
   }

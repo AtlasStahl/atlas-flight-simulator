@@ -75,4 +75,11 @@ export class DynamicWater {
             (this._mesh.material as THREE.ShaderMaterial).uniforms.uCameraPosition.value.copy(cameraPos);
         }
     }
+
+    /** Dispose water mesh resources and remove from scene */
+    dispose(scene: THREE.Scene): void {
+        scene.remove(this._mesh);
+        this._mesh.geometry.dispose();
+        (this._mesh.material as THREE.ShaderMaterial).dispose();
+    }
 }

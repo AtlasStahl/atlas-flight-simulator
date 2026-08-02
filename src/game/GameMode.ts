@@ -1,9 +1,6 @@
 /** Game mode definitions */
-export enum GameMode {
-    FREE_FLIGHT = 'free_flight',
-    RING_MISSION = 'ring_mission',
-    COMBAT = 'combat'
-}
+export const GameMode = { FREE_FLIGHT: 'free_flight', RING_MISSION: 'ring_mission', COMBAT: 'combat' } as const;
+export type GameMode = (typeof GameMode)[keyof typeof GameMode];
 
 export interface GameModeConfig {
     mode: GameMode;

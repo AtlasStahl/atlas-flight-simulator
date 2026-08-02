@@ -3,15 +3,27 @@ import { GaugeRenderer } from './GaugeRenderer';
 /** Attitude Indicator (Artificial Horizon) gauge */
 export class AttitudeGauge {
   private _renderer: GaugeRenderer;
+  private _ctx: CanvasRenderingContext2D;
+  private _x: number;
+  private _y: number;
+  private _r: number;
+
+  get x(): number { return this._x; }
+  get y(): number { return this._y; }
+  get r(): number { return this._r; }
 
   constructor(
-    private _ctx: CanvasRenderingContext2D,
+    ctx: CanvasRenderingContext2D,
     renderer: GaugeRenderer,
-    private _x: number,
-    private _y: number,
-    private _r: number
+    x: number,
+    y: number,
+    r: number
   ) {
+    this._ctx = ctx;
     this._renderer = renderer;
+    this._x = x;
+    this._y = y;
+    this._r = r;
   }
 
   draw(pitch: number, roll: number): void {

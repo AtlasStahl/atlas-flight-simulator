@@ -1,19 +1,33 @@
 import { GaugeRenderer } from './GaugeRenderer';
-import { HUDScale } from './HUDTheme';
+import type { HUDScale } from './HUDTheme';
 
 /** Altimeter gauge - draws analog altitude indicator with needle */
 export class AltimeterGauge {
   private _renderer: GaugeRenderer;
+  private _ctx: CanvasRenderingContext2D;
+  private _x: number;
+  private _y: number;
+  private _r: number;
+  private _scale: HUDScale;
+
+  get x(): number { return this._x; }
+  get y(): number { return this._y; }
+  get r(): number { return this._r; }
 
   constructor(
-    private _ctx: CanvasRenderingContext2D,
+    ctx: CanvasRenderingContext2D,
     renderer: GaugeRenderer,
-    private _x: number,
-    private _y: number,
-    private _r: number,
-    private _scale: HUDScale
+    x: number,
+    y: number,
+    r: number,
+    scale: HUDScale
   ) {
+    this._ctx = ctx;
     this._renderer = renderer;
+    this._x = x;
+    this._y = y;
+    this._r = r;
+    this._scale = scale;
   }
 
   draw(altitude: number): void {

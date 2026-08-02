@@ -2,8 +2,8 @@ import * as THREE from 'three';
 
 export class Atmosphere {
     private _fog: THREE.FogExp2;
-    private _sky: THREE.Mesh;
-    private _skyMaterial: THREE.ShaderMaterial;
+    private _sky!: THREE.Mesh;
+    private _skyMaterial!: THREE.ShaderMaterial;
 
     constructor(scene: THREE.Scene, sunPosition: THREE.Vector3) {
         this._fog = new THREE.FogExp2(0x87ceeb, 0.00015);
@@ -52,7 +52,6 @@ export class Atmosphere {
     }
 
     updateSkyPosition(camPos: THREE.Vector3): void { this._sky.position.copy(camPos); }
-    setDensity(d: number): void { this._fog.density = d; }
     setFogDensity(d: number): void { this._fog.density = d; }
     dispose(scene: THREE.Scene): void {
         scene.remove(this._sky);

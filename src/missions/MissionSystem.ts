@@ -15,23 +15,13 @@ export class MissionSystem {
   private _startTime: number = 0;
   private _score: number = 0;
 
-  constructor(scene: THREE.Scene) {
+  constructor(_scene: THREE.Scene) {
     // Don't create rings yet - wait for ring_mission mode
   }
 
   createRingMission(scene: THREE.Scene) {
-    // Clear existing rings with proper disposal
-    this._rings.forEach(ring => {
-      scene.remove(ring.mesh);
-      ring.mesh.geometry?.dispose();
-      if (Array.isArray(ring.mesh.material)) {
-        ring.mesh.material.forEach(m => m.dispose());
-      } else {
-        ring.mesh.material?.dispose();
-      }
-    });
-    this._rings = [];
-    this._score = 0;
+    // Use clearRings which now properly disposes
+    this.clearRings(scene);
     this._startTime = performance.now();
 
     // Create 8 rings in a path around the runway
@@ -84,8 +74,16 @@ export class MissionSystem {
   }
 
   clearRings(scene: THREE.Scene) {
-    // Remove all rings (for free flight mode)
-    this._rings.forEach(ring => scene.remove(ring.mesh));
+    // Remove all rings with proper disposal (for free flight mode)
+    for (const ring of this._rings) {
+      scene.remove(ring.mesh);
+      ring.mesh.geometry?.dispose();
+      if (Array.isArray(ring.mesh.material)) {
+        ring.mesh.material.forEach(m => m.dispose());
+      } else {
+        ring.mesh.material?.dispose();
+      }
+    }
     this._rings = [];
     this._score = 0;
   }

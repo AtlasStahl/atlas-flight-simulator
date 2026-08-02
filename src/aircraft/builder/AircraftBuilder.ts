@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { AircraftConfig } from '../AircraftConfig';
 
 /** Aircraft model builder interface */
 export interface AircraftBuilder {

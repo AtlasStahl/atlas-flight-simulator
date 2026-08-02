@@ -1,23 +1,22 @@
 import * as THREE from 'three';
-import { type AircraftConfig, AIRCRAFT_CONFIGS } from './aircraft/AircraftConfig';
+import type { AircraftConfig } from './aircraft/AircraftConfig';
 import { Aircraft } from './aircraft/Aircraft';
 import { FlightModel } from './physics/FlightModel';
 import { GroundCollision } from './physics/GroundCollision';
 import { Terrain } from './environment/Terrain';
 import { Runway } from './environment/Runway';
-import { CameraManager, CameraMode } from './camera/CameraManager';
+import { CameraManager } from './camera/CameraManager';
 import { Controls } from './input/Controls';
 import { HUD } from './ui/HUD';
 import { AdvancedMenu } from './ui/AdvancedMenu';
 import { MissionSystem } from './missions/MissionSystem';
 import { PostProcessingManager } from './rendering/PostProcessing';
 import { Atmosphere } from './rendering/Atmosphere';
-import { AirportLighting } from './environment/AirportLighting';
 import { EngineEffects } from './aircraft/EngineEffects';
 import { WeatherSystem, WEATHER_PRESETS } from './weather/WeatherSystem';
 import { CombatManager } from './combat/CombatManager';
 import { RadarDisplay } from './ui/RadarDisplay';
-import { GameMode, GAME_MODES } from './game/GameMode';
+import { GameMode } from './game/GameMode';
 import { DynamicWater } from './environment/DynamicWater';
 
 // --- Utility ---
@@ -42,7 +41,7 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFShadowMap;
+renderer.shadowMap.type = THREE.PCFShadowMap;
 document.body.appendChild(renderer.domElement);
 
 // --- Lighting ---
@@ -73,7 +72,6 @@ const dynamicWater = new DynamicWater(scene, new THREE.Vector3(1500, 2, 1200), 3
 // --- Atmosphere & Post-Processing ---
 const atmosphere = new Atmosphere(scene, sunLight.position);
 const postProcessing = new PostProcessingManager(scene, camera, renderer);
-const airportLighting = new AirportLighting(scene, runway.bounds);
 
 // --- Weather ---
 let weatherSystem: WeatherSystem | null = null;
@@ -93,8 +91,6 @@ let engineEffects: EngineEffects | null = null;
 let menu: AdvancedMenu | null = null;
 
 // Selected options
-let selectedAircraft: string = 'cessna';
-let selectedWeather: string = 'clear';
 let selectedGameMode: GameMode = GameMode.FREE_FLIGHT;
 
 // Runway bounds for collision detection
@@ -112,16 +108,16 @@ function returnToMenu() {
   if (radar) {
     radar.hide();
   }
-  
+
   // Stop combat and clean up
   combatManager.reset();
-  
+
   // Clean up weather system
   if (weatherSystem) {
     weatherSystem.cleanup();
     weatherSystem = null;
   }
-  
+
   // Remove aircraft with proper disposal
   if (aircraft) {
     scene.remove(aircraft.group);
@@ -133,10 +129,13 @@ function returnToMenu() {
     disposeGroup(engineEffects.group);
     engineEffects = null;
   }
-  
+
   // Reset flight model state
   flightModel.reset?.();
-  
+
+  // Dispose mission rings
+  missionSystem.clearRings(scene);
+
   // Show menu
   if (menu) {
     menu.show();
@@ -145,10 +144,8 @@ function returnToMenu() {
 
 function startGame(config: AircraftConfig, weather: string, gameMode: GameMode) {
   // Store selected options
-  selectedAircraft = config.type;
-  selectedWeather = weather;
   selectedGameMode = gameMode;
-  
+
   // Remove old aircraft with proper disposal
   if (aircraft) {
     scene.remove(aircraft.group);
@@ -181,13 +178,13 @@ function startGame(config: AircraftConfig, weather: string, gameMode: GameMode) 
     missionSystem.clearRings(scene);
   }
   combatManager.reset();
-  
+
   // Setup weather
   if (weatherSystem) {
     weatherSystem.cleanup();
   }
   weatherSystem = new WeatherSystem(scene, WEATHER_PRESETS[weather] || WEATHER_PRESETS.clear);
-  
+
   // Update atmosphere fog based on weather
   const weatherConfig = WEATHER_PRESETS[weather] || WEATHER_PRESETS.clear;
   atmosphere.setFogDensity(weatherConfig.fogDensity);
@@ -209,7 +206,7 @@ function startGame(config: AircraftConfig, weather: string, gameMode: GameMode) 
   // Connect camera button to camera cycling
   hud.setCameraCallback(() => {
     const newMode = cameraManager.cycleMode();
-    hud.updateCameraButton(newMode);
+    hud!.updateCameraButton(newMode);
   });
   hud.updateCameraButton(cameraManager.mode);
 
@@ -356,7 +353,7 @@ function animate() {
     // Update combat
     if (selectedGameMode === GameMode.COMBAT) {
       const combatResult = combatManager.update(dt, aircraft.position, aircraft.rotation, now / 1000, { shoot: controls.shoot });
-      
+
       if (combatResult.playerHit) {
         // Flash screen red or play sound
       }
@@ -377,10 +374,11 @@ function animate() {
       // Use aircraft rotation for heading when speed is low (prevents wild spinning)
       const heading = speed > 5
         ? Math.atan2(aircraft.velocity.z, aircraft.velocity.x)
-        : -aircraft.rotation.y;
+        : aircraft.rotation.y;
       const verticalSpeed = aircraft.velocity.y;
-      const pitch = aircraft.rotation.y;
-      const roll = aircraft.rotation.x;
+      // YXZ Euler order: x=pitch, y=heading, z=roll/bank
+      const pitch = aircraft.rotation.x;
+      const roll = aircraft.rotation.z;
 
       // Only pass missionStatus in ring_mission mode
       const missionData = selectedGameMode === GameMode.RING_MISSION ? missionStatus : undefined;
@@ -409,7 +407,7 @@ function animate() {
         combatData
       );
     }
-    
+
     // Update radar
     if (radar && selectedGameMode === GameMode.COMBAT) {
       radar.update(aircraft.position, Math.atan2(aircraft.velocity.z, aircraft.velocity.x));
@@ -418,7 +416,7 @@ function animate() {
 
   // Update terrain/clouds
   terrain.update(dt);
-  
+
   // Update dynamic water
   dynamicWater.update(dt);
 

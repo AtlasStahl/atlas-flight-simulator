@@ -5,7 +5,7 @@ import * as THREE from 'three';
  * Switches between detail levels based on camera distance.
  */
 export class LODManager {
-  private _lodGroups: LODGroup[] = [];
+  private _lodGroups: THREE.LOD[] = [];
 
   /**
    * Create an LOD-managed object with multiple detail levels.
@@ -55,7 +55,7 @@ export class LODManager {
     for (const lod of this._lodGroups) {
       for (const level of lod.levels) {
         const obj = level.object;
-        obj.traverse(child => {
+        obj.traverse((child: THREE.Object3D) => {
           if (child instanceof THREE.Mesh) {
             child.geometry?.dispose();
             if (Array.isArray(child.material)) {

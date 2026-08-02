@@ -107,6 +107,9 @@ function shadow(obj: THREE.Object3D) {
 //  AirportBuildings class
 // ============================================================
 export class AirportBuildings {
+  /** Track all building groups for disposal */
+  private _groups: THREE.Group[] = [];
+
   createBuildings(scene: THREE.Scene) {
     this.createTerminal(scene);
     this.createControlTower(scene);
@@ -114,6 +117,24 @@ export class AirportBuildings {
     this.createFuelTanks(scene);
     this.createCargoArea(scene);
     this.createTaxiways(scene);
+  }
+
+  /** Dispose all building resources and remove from scene */
+  dispose(scene: THREE.Scene): void {
+    for (const group of this._groups) {
+      scene.remove(group);
+      group.traverse(child => {
+        if (child instanceof THREE.Mesh) {
+          child.geometry?.dispose();
+          if (Array.isArray(child.material)) {
+            child.material.forEach(m => m.dispose());
+          } else {
+            child.material?.dispose();
+          }
+        }
+      });
+    }
+    this._groups = [];
   }
 
   // ==========================================================
@@ -190,6 +211,7 @@ export class AirportBuildings {
 
     group.position.set(800, 0, 0);
     scene.add(group);
+    this._groups.push(group);
   }
 
   /** Create a grid of window frames around transparent panes */
@@ -323,6 +345,7 @@ export class AirportBuildings {
 
     group.position.set(850, 0, 50);
     scene.add(group);
+    this._groups.push(group);
   }
 
   // ==========================================================
@@ -415,6 +438,7 @@ export class AirportBuildings {
 
       group.position.set(pos.x, 0, pos.z);
       scene.add(group);
+      this._groups.push(group);
     });
   }
 
@@ -473,6 +497,7 @@ export class AirportBuildings {
 
       group.position.set(pos.x, 0, pos.z);
       scene.add(group);
+      this._groups.push(group);
     });
   }
 
@@ -545,6 +570,7 @@ export class AirportBuildings {
 
     group.position.set(950, 0, -30);
     scene.add(group);
+    this._groups.push(group);
   }
 
   // ==========================================================

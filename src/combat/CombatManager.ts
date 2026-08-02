@@ -55,6 +55,11 @@ export class CombatManager {
         this._removeEnemies();
         this._removeBullets();
         this._removeExplosions();
+        // Dispose shared bullet geometry/material
+        this._bulletGeo.dispose();
+        this._bulletMat.dispose();
+        this._bulletGeo = new THREE.SphereGeometry(0.3, 4, 4);
+        this._bulletMat = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
         this._wave = 0;
         this._score = 0;
         this._playerHealth = this._maxPlayerHealth;

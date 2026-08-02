@@ -77,19 +77,19 @@ export const AIRCRAFT_CONFIGS: Record<string, AircraftConfig> = {
   },
   extra: {
     name: 'Extra 300',
-    maxSpeed: 180,        // ~650 km/h
-    rotateSpeed: 39,      // ~140 km/h
-    maxClimbRate: 15,     // ~3000 ft/min
-    rollRate: 300,
-    pitchRate: 120,
-    yawRate: 80,
-    throttleResponse: 0.7,
-    maxThrust: 2500,
+    maxSpeed: 220,        // ~790 km/h
+    rotateSpeed: 28,      // ~100 km/h (aerobatic, very short takeoff)
+    maxClimbRate: 30,     // ~6000 ft/min
+    rollRate: 420,
+    pitchRate: 180,
+    yawRate: 100,
+    throttleResponse: 0.9,
+    maxThrust: 8000,      // T/W ~1.16 — real Extra 300 can climb vertically
     mass: 700,
     wingArea: 10.2,
     dragCoefficient: 0.02,
-    liftCoefficient: 1.5,
-    stallSpeed: 25,       // ~90 km/h
+    liftCoefficient: 1.6,
+    stallSpeed: 18,       // ~65 km/h (aerobatic stall speed, with power-on)
     color: 0xff0000,
     scale: 0.8,
     type: 'extra'

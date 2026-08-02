@@ -13,20 +13,31 @@ export class Controls {
   throttleDown = false;
   flaps = false;
   brakes = false;
-  
+
   // Combat & Camera
   shoot = false;
   cycleCamera = false;
   toggleOrbit = false;
 
+  private _boundKeyDown: (e: KeyboardEvent) => void;
+  private _boundKeyUp: (e: KeyboardEvent) => void;
+
   constructor() {
-    window.addEventListener('keydown', (e) => this.onKeyDown(e));
-    window.addEventListener('keyup', (e) => this.onKeyUp(e));
+    this._boundKeyDown = (e) => this.onKeyDown(e);
+    this._boundKeyUp = (e) => this.onKeyUp(e);
+    window.addEventListener('keydown', this._boundKeyDown);
+    window.addEventListener('keyup', this._boundKeyUp);
+  }
+
+  /** Remove event listeners to prevent memory leaks */
+  dispose(): void {
+    window.removeEventListener('keydown', this._boundKeyDown);
+    window.removeEventListener('keyup', this._boundKeyUp);
   }
 
   private onKeyDown(e: KeyboardEvent) {
     this.keys.add(e.code);
-    if (['KeyW', 'KeyS', 'KeyA', 'KeyD', 'KeyQ', 'KeyE', 'KeyR', 'KeyF', 'KeyG', 'KeyB', 
+    if (['KeyW', 'KeyS', 'KeyA', 'KeyD', 'KeyQ', 'KeyE', 'KeyR', 'KeyF', 'KeyG', 'KeyB',
          'KeyV', 'KeyC', 'Space',
          'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
          'ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight'].includes(e.code)) {
@@ -60,13 +71,13 @@ export class Controls {
 
     // Brakes: B
     this.brakes = this.keys.has('KeyB');
-    
+
     // Shoot: Space or V
     this.shoot = this.keys.has('Space') || this.keys.has('KeyV');
-    
+
     // Cycle camera: C
     this.cycleCamera = this.keys.has('KeyC');
-    
+
     // Toggle orbit: Right mouse (handled separately) or Shift
     this.toggleOrbit = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
   }

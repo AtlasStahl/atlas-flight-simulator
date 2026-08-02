@@ -3,7 +3,6 @@ import * as THREE from 'three';
 export class EngineEffects {
     private _group: THREE.Group;
     private _navLights: { left: THREE.Mesh; right: THREE.Mesh; tail: THREE.Mesh } | null = null;
-    private _propBlur: THREE.Mesh | null = null;
 
     constructor(aircraftGroup: THREE.Group) {
         this._group = new THREE.Group();
@@ -35,7 +34,7 @@ export class EngineEffects {
         this._navLights = { left, right, tail };
     }
 
-    update(time: number, throttle: number): void {
+    update(time: number, _throttle: number): void {
         if (!this._navLights) return;
 
         const blink = Math.sin(time * Math.PI * 2) > 0 ? 3 : 0.1;

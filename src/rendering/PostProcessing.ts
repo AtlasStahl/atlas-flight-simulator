@@ -16,7 +16,7 @@ export class PostProcessingManager {
             new THREE.Vector2(window.innerWidth, window.innerHeight), 0.25, 0.4, 0.9
         );
         this._composer.addPass(this._bloomPass);
-        this._composer.addPass(new SMAAPass(window.innerWidth, window.innerHeight));
+        this._composer.addPass(new SMAAPass());
         this._composer.addPass(new OutputPass());
     }
 
