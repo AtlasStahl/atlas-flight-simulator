@@ -9,6 +9,7 @@ export class GroundCollision {
   private _getTerrainHeight: (x: number, z: number) => number;
   private _gracePeriod = 3; // 3 seconds of grace after start - no crash detection
   private _groundThreshold = 3.0; // Hysteresis threshold for ground detection (meters)
+  private _runwayY = 1.5; // Runway surface height (elevated above terrain to prevent z-fighting)
 
   constructor(getTerrainHeight?: (x: number, z: number) => number) {
     // Default to flat ground if no height function provided
@@ -26,7 +27,12 @@ export class GroundCollision {
     }
 
     const terrainH = this._getTerrainHeight(aircraft.position.x, aircraft.position.z);
-    const groundY = terrainH + 0.5 * aircraft.config.scale;
+    // Check if aircraft is on runway - use runway height, otherwise terrain height
+    const onRunway = aircraft.position.x >= runwayBounds.x1 &&
+                     aircraft.position.x <= runwayBounds.x2 &&
+                     aircraft.position.z >= runwayBounds.z1 &&
+                     aircraft.position.z <= runwayBounds.z2;
+    const groundY = (onRunway ? this._runwayY : terrainH) + 0.5 * aircraft.config.scale;
 
     // --- Crash: high sink rate (only after grace period) ---
     if (this._gracePeriod <= 0 && aircraft.position.y <= groundY && aircraft.velocity.y < -8) {
@@ -36,7 +42,7 @@ export class GroundCollision {
 
     // --- On ground (with hysteresis to prevent flickering) ---
     const isNearGround = aircraft.position.y <= groundY + this._groundThreshold;
-    
+
     if (isNearGround && (aircraft.position.y <= groundY || this._taxiMode)) {
       aircraft.position.y = groundY + 0.1; // Small offset to prevent z-fighting
       this._taxiMode = true;

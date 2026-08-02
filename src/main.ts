@@ -161,10 +161,11 @@ function startGame(config: AircraftConfig, weather: string, gameMode: GameMode) 
 
   // Create new aircraft
   aircraft = new Aircraft(config);
-  // Compute correct ground level so aircraft starts on the surface, not floating above
-  const terrainH = terrain.getHeight(startPos.x, startPos.z);
-  const groundY = terrainH + 0.5 * config.scale;
-  aircraft.position.set(startPos.x, groundY + 0.1, startPos.z);
+  // Compute correct ground level: runway is at y=1.5, aircraft sits on runway surface
+  // Add small offset above runway to prevent z-fighting and ensure visibility
+  const runwayY = 1.5;
+  const startHeight = runwayY + 0.5 * config.scale + 0.2;
+  aircraft.position.set(startPos.x, startHeight, startPos.z);
   aircraft.rotation.copy(startRot);
   scene.add(aircraft.group);
 

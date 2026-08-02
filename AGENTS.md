@@ -1,235 +1,411 @@
 # AGENTS.md
 
-## Project Overview
+Operating contract for AI coding agents working on **Atlas Flight Simulator**.
+Treat every rule below as project policy, not optional advice.
 
-**Atlas Flight Simulator** is a browser-based 3D flight simulator built with Three.js, TypeScript, and Vite. It features realistic flight physics, multiple aircraft, an interactive terrain environment, and a mission system with ring obstacles.
+## 1. Objective
 
-- **Language**: TypeScript (ES2023)
-- **3D Engine**: Three.js
-- **Build Tool**: Vite
-- **Target**: Web browser (no server required)
+Maintain a stable, understandable browser flight simulator built with TypeScript, Three.js, and Vite.
 
----
+Priority order:
 
-## Setup Commands
+1. Correct behavior
+2. Runtime stability
+3. Maintainability
+4. Predictable performance
+5. Visual polish
+6. Feature breadth
+
+Prefer the smallest coherent change that fully solves the task.
+
+## 2. Hard Rules
+
+- Inspect before editing: read the target code, imports, callers, related types, and configuration.
+- Verify repository facts: never invent files, symbols, scripts, APIs, package versions, or test commands.
+- Keep scope narrow: do not mix features, refactors, dependency upgrades, formatting, and cleanup without necessity.
+- Preserve behavior outside the task: especially controls, physics signs, units, camera behavior, UI state, and mode lifecycle.
+- Do not hide errors with `any`, `@ts-ignore`, disabled checks, empty catches, unsafe casts, or fake fallbacks.
+- Do not add or upgrade dependencies unless the task genuinely requires it.
+- Never hand-edit `package-lock.json` or generated files in `dist/`.
+- Do not leave placeholders, stubs, temporary logs, or unexplained TODOs.
+- Inspect `git status` before edits and protect unrelated user changes.
+- Do not commit, push, create branches, or rewrite history unless explicitly requested.
+- Never claim completion, test success, performance improvement, or runtime correctness without observed evidence.
+
+## 3. Required Agent Workflow
+
+### A. Understand
+
+Before changing code:
+
+- extract the requested behavior and acceptance criteria
+- identify affected subsystems and regression risks
+- separate confirmed facts from assumptions
+- resolve ambiguity from the repository before guessing
+
+For multi-file or behavior-changing tasks, maintain a short task list containing:
+
+- files to inspect
+- files expected to change
+- invariants to preserve
+- validation to run
+
+### B. Inspect
+
+At minimum:
+
+1. Read the relevant implementation as a contiguous section.
+2. Search all call sites, imports, related types, and state owners.
+3. Read `package.json`, `tsconfig.json`, `FINDINGS.md`, and any nearer `AGENTS.md` when relevant.
+4. Check installed types or official documentation before using an uncertain Three.js or browser API.
+5. For bugs, trace the data flow to the first incorrect value; do not patch only the visible symptom.
+
+### C. Plan
+
+Choose one concrete approach and state internally:
+
+- root cause or design goal
+- smallest safe change
+- affected files
+- preserved invariants
+- validation method
+
+Do not merge several speculative approaches into one implementation.
+
+### D. Implement
+
+- Make small, reviewable edits.
+- Preserve public interfaces unless changing them is necessary.
+- Separate behavior changes from structural refactors where possible.
+- Re-open or diff every changed file; never assume an edit succeeded.
+- Run an early build after structural changes instead of accumulating unchecked edits.
+- Integrate cross-subsystem changes one boundary at a time.
+
+### E. Validate
+
+For every source change, run:
 
 ```bash
-# Install dependencies
-npm install
-
-# Start development server with HMR
-npm run dev
-
-# Production build
 npm run build
-
-# Preview production build
-npm run preview
+git diff --check
+git status --short
+git diff --stat
+git diff
 ```
 
-- The dev server runs on `http://localhost:5173` by default (Vite default).
-- No backend or database is required — this is a client-side-only application.
+`npm run build` is mandatory because it runs TypeScript compilation and the Vite production build.
 
----
+For runtime, visual, input, physics, or lifecycle changes, also run:
 
-## Architecture
-
+```bash
+npm run dev
 ```
+
+Then perform the relevant browser checks in Section 10. Build success alone does not prove runtime correctness.
+
+### F. Report
+
+The final response must state:
+
+- what changed
+- which files changed
+- which checks were actually run
+- which checks could not be run
+- genuine remaining risks
+
+## 4. Anti-Drift Rules for Local Models
+
+- Inspect every tool result before selecting the next action.
+- Do not stop immediately after writing code; pass the completion gate in Section 12.
+- Re-read the user task after large edits and map every requested behavior to an implemented change.
+- Debug with one active hypothesis and one focused change at a time.
+- On command failure, fix the first actionable root cause; avoid shotgun changes.
+- If a file or symbol is missing, search for its current replacement instead of recreating obsolete code.
+- If an API is uncertain, verify it before coding.
+- Prefer explicit state, units, ownership, and contracts over inferred behavior.
+- If a tool call is empty or malformed, inspect repository state and retry with a smaller explicit operation.
+- Never infer success from silence or from a plausible-looking diff.
+- Keep progress notes concise; use tools rather than replacing verification with speculation.
+
+## 5. Repository Facts
+
+### Stack
+
+- TypeScript targeting ES2023
+- Three.js
+- Vite
+- Browser-only application
+- No backend or database
+
+### Scripts
+
+```bash
+npm install       # Install/update dependencies only when needed
+npm run dev       # Start Vite development server
+npm run build     # TypeScript compile + Vite production build
+npm run preview   # Preview production bundle
+```
+
+Current limitations:
+
+- no automated test framework
+- no ESLint or Prettier command
+- no full TypeScript strict mode (`strict: true` is not configured)
+
+Do not claim that tests, linting, or strict mode exist when they do not.
+
+### Current Structure
+
+```text
 src/
-├── main.ts              # Entry point, scene setup, game loop
-├── aircraft/
-│   ├── Aircraft.ts      # 3D aircraft model builder (procedural geometry)
-│   └── AircraftConfig.ts # Aircraft type definitions & flight parameters
-├── camera/
-│   └── ChaseCamera.ts   # Follow camera behind the aircraft
-├── environment/
-│   ├── Terrain.ts       # Procedural terrain (mountains, lakes, forests, clouds)
-│   └── Runway.ts        # Runway with markings and bounds
-├── input/
-│   └── Controls.ts      # Keyboard input handler
-├── missions/
-│   ├── MissionSystem.ts # Mission orchestration & scoring
-│   └── RingObstacle.ts  # Collectible ring obstacles
-├── physics/
-│   ├── FlightModel.ts   # Aerodynamic flight simulation
-│   └── GroundCollision.ts # Terrain/runway collision detection
-└── ui/
-    ├── HUD.ts           # Cockpit instruments (Canvas API)
-    └── AircraftSelector.ts # Pre-flight aircraft selection UI
+├── main.ts                  # Composition root and game loop
+├── aircraft/                # Aircraft model, config, effects
+├── camera/                  # CameraManager and camera modes
+├── combat/                  # Combat lifecycle and enemies
+├── environment/             # Terrain, runway, airport, water, vegetation
+├── game/                    # Game-mode definitions
+├── input/                   # Keyboard state and control mapping
+├── missions/                # Ring mission and scoring
+├── physics/                 # FlightModel and GroundCollision
+├── rendering/               # Atmosphere and post-processing
+├── ui/                      # Menu, HUD, radar, reusable gauges
+└── weather/                 # Weather visuals and flight effects
 ```
 
-### Key Design Patterns
+This map can become outdated. Verify paths before editing.
 
-| Pattern | Description |
-|---------|-------------|
-| **Scene Graph** | Three.js `Scene` → `Object3D` hierarchy for all 3D objects |
-| **Game Loop** | `requestAnimationFrame` in `main.ts` drives update + render |
-| **Component System** | Each subsystem (physics, camera, input) is a separate class |
-| **Config-Driven Aircraft** | `AircraftConfig` defines all aircraft variants (Cessna, Boeing, Extra) |
-| **Stateless Updates** | Physics and camera update from current state each frame |
+## 6. Architecture and Ownership
 
----
+### Composition Root
 
-## Code Style
-
-- **TypeScript strict mode** — enabled in `tsconfig.json`
-- **ES2023 target** — modern JS features are available
-- **Bundler module resolution** — Vite handles imports
-- **No semicolons** — follows standard TypeScript conventions
-- **Class-based architecture** — one class per file, exported default or named
-- **Three.js types** — imported from `@types/three`
-
-### Naming Conventions
-
-| Element | Convention | Example |
-|---------|-----------|---------|
-| Classes | PascalCase | `FlightModel`, `ChaseCamera` |
-| Variables | camelCase | `startPos`, `aircraft` |
-| Constants | UPPER_SNAKE_CASE | `MAX_THROTTLE` |
-| Files | PascalCase.ts | `Aircraft.ts` |
-
----
-
-## Development Guidelines
-
-### Adding a New Feature
-
-1. Identify which subsystem the feature belongs to.
-2. Create new files in the appropriate folder under `src/`.
-3. Import and integrate the new module in `main.ts` (or the relevant parent module).
-4. Ensure all Three.js objects are properly added to the scene and cleaned up when removed.
-
-### Working with Three.js Objects
-
-- Always add objects to the `scene` or a parent `Object3D` group.
-- When removing objects, call `scene.remove()` and dispose of geometries/materials to avoid memory leaks.
-- Use `THREE.Euler` with explicit order (`'YXZ'`) for aircraft rotation.
-
-### Physics and Flight Model
-
-- The `FlightModel` class handles aerodynamic calculations.
-- Velocity, rotation, and forces are updated per frame in the game loop.
-- Ground collision is checked separately via `GroundCollision`.
-- Aircraft configs define stall speed, max speed, takeoff speed, and roll rates.
-
-### UI and HUD
-
-- The HUD uses HTML Canvas for drawing cockpit instruments.
-- Update HUD values each frame by reading from the `FlightModel` state.
-- The `AircraftSelector` is a DOM-based overlay shown before flight starts.
-
----
-
-## Common Tasks
-
-### Add a New Aircraft Type
-
-1. Add a new config entry in `AircraftConfig.ts` with all flight parameters.
-2. Customize the procedural geometry in `Aircraft.ts` if the visual style differs.
-3. Register the aircraft in `AircraftSelector.ts`.
-
-### Add a New Environment Element
-
-1. Create a new class in `src/environment/`.
-2. Instantiate and add it to the scene in `main.ts`.
-3. If it affects collision, update `GroundCollision.ts`.
-
-### Modify the Mission System
-
-1. Edit `MissionSystem.ts` for mission logic and scoring.
-2. Create new obstacle types in `src/missions/` following `RingObstacle.ts` as a template.
-
----
-
-## Build and Output
-
-- `npm run build` produces a production bundle in `dist/`.
-- The output is a single-page application (`index.html` + bundled JS/CSS).
-- No server-side rendering — everything runs client-side.
-
----
-
-## Debugging
-
-### Three.js Debugging
-- Use `scene.traverse()` to inspect object hierarchy
-- Enable wireframe mode: `material.wireframe = true` to see geometry
-- Use `THREE.Box3Helper` or `THREE.GridHelper` for spatial debugging
-- Check `renderer.info` for memory/draw call statistics
-- Use `console.log(obj.position, obj.rotation, obj.scale)` for transform debugging
-
-### Common Issues
-- **Object not visible**: Check if it's added to scene, camera frustum, and material visibility
-- **Z-fighting**: Adjust near/far plane ratios or use polygon offset
-- **Performance drops**: Check draw calls with `renderer.info.render.calls`, reduce geometry complexity
-- **Memory leaks**: Always dispose geometries, materials, and textures when removing objects
-
-### Console Logging
-- Use `console.log()` sparingly in production builds
-- Prefix logs with subsystem: `[FlightModel]`, `[HUD]`, `[MissionSystem]`
-- Remove debug logs before committing
-
----
-
-## Performance Guidelines
-
-### Three.js Optimization
-- Reuse geometries and materials where possible
-- Use `InstancedMesh` for repeated objects (trees, rings)
-- Limit shadow-casting objects to essential ones only
-- Use `renderer.setPixelRatio()` capped at 2 (already implemented)
-- Avoid creating new objects in the game loop (allocates garbage)
-
-### Game Loop
-- Keep frame updates under 16ms for 60fps
-- Batch Three.js operations (avoid multiple scene modifications per frame)
-- Use `requestAnimationFrame` (already implemented in main.ts)
-- Cache frequently accessed properties outside loops
-
-### Memory Management
-```typescript
-// When removing objects:
-scene.remove(object);
-object.geometry?.dispose();
-if (Array.isArray(object.material)) {
-  object.material.forEach(m => m.dispose());
-} else {
-  object.material?.dispose();
-}
-```
-
----
-
-## Conventions
-
-### Three.js-Specific
-- Always use explicit Euler order `'YXZ'` for aircraft rotation
-- Use `THREE.Vector3` for positions, `THREE.Euler` for rotations
-- Scene objects should be added to parent groups, not directly to scene
-- Use `Object3D` groups for logical grouping (aircraft parts, environment sections)
+`main.ts` may create, connect, update, and reset subsystems. Do not place substantial new physics, UI drawing, environment generation, combat logic, or rendering algorithms directly in it.
 
 ### Physics
-- Time-based calculations should use delta time (not frame-based)
-- Velocity is in m/s, positions in meters (Three.js units)
-- Gravity constant: ~9.81 m/s²
-- Aircraft configs define realistic speed ranges (km/h in config, converted to m/s in physics)
 
-### UI/HUD
-- Canvas-based HUD should match screen resolution
-- Update HUD values from FlightModel state each frame
-- DOM overlays (AircraftSelector) should be hidden/shown, not recreated
+- `FlightModel` owns aerodynamic forces, rotation, velocity, and position integration.
+- `GroundCollision` owns terrain/runway contact behavior.
+- Physics code must not manipulate DOM, menus, or unrelated scene objects.
+- Do not duplicate collision or flight rules in UI, camera, or game-loop code.
 
-### Input Handling
-- Keyboard state is tracked in Controls class
-- Input is polled each frame, not event-driven
-- Use key codes, not key values for consistency
+### Aircraft
 
----
+- Keep aircraft parameters and units in `AircraftConfig.ts`.
+- Keep procedural geometry and aircraft state in aircraft modules.
+- Do not scatter aircraft-specific constants across physics, HUD, menu, and combat code.
 
-## PR Guidelines
+### UI
 
-- **Title format**: `[scope] Description` — e.g., `[physics] Add wind resistance model`
-- Keep changes focused on a single subsystem when possible.
-- Ensure the dev server starts without TypeScript errors (`npm run dev`).
-- Test in browser — verify 3D rendering, controls, and HUD updates work correctly.
-- **Before merging**: Check for memory leaks (dispose objects), performance regressions (draw calls), and visual artifacts (z-fighting, clipping).
+- UI displays state; it is not the authority for simulation state.
+- Do not create DOM elements or canvases in per-frame updates.
+- Keep display smoothing separate from authoritative values.
+
+### Environment and Rendering
+
+- Environment systems expose narrow queries such as terrain height or runway bounds.
+- Rendering helpers may read state but must not own gameplay rules.
+- Large repeated populations should use shared resources or instancing where practical.
+
+### Missions, Combat, Weather, and Camera
+
+Each subsystem owns its lifecycle. Start/reset/cleanup must not leave duplicate objects, stale references, timers, listeners, or update work.
+
+Avoid circular imports. Prefer explicit constructor parameters, typed state objects, and narrow interfaces.
+
+## 7. Physics and Coordinate Contracts
+
+Treat these as compatibility contracts:
+
+- world up: `+Y`
+- gravity: `-Y`
+- aircraft forward: local `+X`
+- Euler order: `'YXZ'`
+- current bank/roll angle: `rotation.z`
+- position: meters
+- velocity and configured speeds: meters per second
+- mass: kilograms
+- forces/thrust: Newtons
+- wing area: square meters
+- configured angular rates: degrees per second, converted before rotation
+- delta time: seconds; motion must never be frame-count-based
+- display units such as knots, km/h, feet, and ft/min: convert at UI boundaries
+
+Before changing any sign, axis, rotation order, or unit:
+
+1. trace every producer and consumer
+2. state the expected positive direction
+3. verify controls, camera, HUD, collision, and effects
+4. test the complete maneuver, not only one numeric value
+
+Never “fix” unusual physics math without validating the whole coordinate convention.
+
+## 8. Three.js and Performance Rules
+
+### Hot Paths
+
+- Reuse vectors, quaternions, Euler objects, arrays, geometries, and materials in update loops.
+- Avoid closures, scene mutations, and large allocations per frame.
+- Keep updates delta-time-based and guard against non-finite values or destabilizing frame gaps.
+- Cache repeated calculations only with a bounded invalidation or size strategy.
+
+### Resource Lifecycle
+
+Every dynamic resource must have one clear owner.
+
+When permanently removing owned content:
+
+- remove it from its parent
+- dispose owned geometries
+- dispose owned materials
+- dispose owned textures and render targets
+- remove listeners and timers
+- clear retaining references
+
+Do not dispose shared resources while another object uses them.
+
+### Rendering
+
+- Reuse geometry and materials where practical.
+- Prefer `THREE.InstancedMesh` for large repeated populations.
+- Limit shadow casting to objects where it adds visible value.
+- Avoid extreme near/far ratios, unnecessary transparency, and coplanar surfaces.
+- Preserve the renderer pixel-ratio cap unless measurements justify a change.
+- Use `renderer.info` for draw-call, geometry, texture, and program investigations.
+
+A code change is not a proven optimization without measurement or observable evidence.
+
+## 9. TypeScript and Style
+
+Preserve the established style:
+
+- 2-space indentation
+- single quotes
+- semicolons
+- PascalCase classes/types
+- camelCase variables/functions
+- UPPER_SNAKE_CASE constants
+- `PascalCase.ts` for class-oriented modules
+- `import type` for type-only imports where appropriate
+
+Quality requirements:
+
+- Prefer specific types; avoid `any`, broad casts, and non-null assertions as shortcuts.
+- Validate nullable state at boundaries.
+- Add explicit return types to exported APIs and complex functions.
+- Explain signs, axes, units, ownership, and non-obvious formulas in comments.
+- Do not comment obvious syntax.
+- Handle closed unions/enums exhaustively where practical.
+- Keep configuration separate from behavior.
+- Reuse existing utilities instead of creating near-duplicates.
+- Update every import and call site when moving or renaming symbols.
+
+## 10. Change-Specific Validation
+
+Always run the universal build and diff checks. Add the relevant runtime checks below.
+
+| Change area | Required smoke checks |
+|---|---|
+| Physics/config | runway idle, throttle, takeoff near rotate speed, pitch/roll direction, bank turn, stall/recovery, ground reset |
+| Input | held vs edge-triggered actions, no repeated toggles, no stuck keys after reset/focus loss |
+| Camera | cycle every mode, no jump or non-finite state after reset |
+| HUD/menu | independent aircraft/weather/mode selections, finite values, resize, start/return/start |
+| Weather | every preset starts and cleans up; effects do not persist into another mode |
+| Mission | rings only in mission mode, score once, reset removes resources |
+| Combat | enemy lifecycle, shooting, waves, radar, reset cleanup |
+| Terrain/environment | no floating/clipped assets in tested areas; bounded object/cache growth |
+| Cleanup | repeat mode transitions and confirm object/resource counts do not grow without bound |
+| Dependency/config | clean install when feasible, production build, preview starts |
+
+If browser or graphics execution is unavailable, state exactly which runtime checks remain unverified.
+
+### Special Implementation Rules
+
+**Physics:** Change one family of coefficients or one behavior at a time. Verify config units and control mapping first.
+
+**Input:** Use `KeyboardEvent.code`. Separate held actions from edge-triggered actions and debounce toggles.
+
+**Terrain placement:** Use terrain height, slope, object footprint, and exclusion zones; a center-point height alone may be insufficient.
+
+**Lifecycle:** Repeated start → menu → start must be safe. Cleanup/reset should be idempotent where practical.
+
+**Refactors:** Split by stable responsibility, not line count. Do not introduce an event bus, state framework, or broad architecture merely to reduce parameters.
+
+**Dependencies:** Confirm necessity, version compatibility, bundle impact, and use the package manager. Never run broad forced upgrades such as `npm audit fix --force` during unrelated work.
+
+## 11. Debugging Protocol
+
+1. Reproduce the smallest reliable scenario.
+2. Record observed and expected behavior.
+3. Trace inputs/state to the first incorrect value.
+4. Add only targeted, subsystem-prefixed temporary diagnostics.
+5. Test one hypothesis with one focused change.
+6. Remove diagnostics.
+7. Re-run adjacent regression checks.
+
+Useful diagnostics:
+
+- `scene.traverse(...)`
+- `renderer.info`
+- `THREE.Box3Helper`
+- `THREE.GridHelper`
+- temporary wireframe mode
+- finite position, velocity, rotation, and scale logging
+
+Never leave noisy per-frame logging in final code.
+
+## 12. Completion Gate
+
+Before reporting completion, confirm:
+
+- every acceptance criterion is implemented
+- every changed file was re-opened or diffed
+- all new symbols and APIs were verified
+- coordinate, unit, control, and lifecycle contracts are preserved
+- no unrelated files changed
+- `npm run build` passed
+- `git diff --check` passed
+- the complete diff was inspected
+- relevant browser checks ran, or missing checks are explicitly disclosed
+- temporary diagnostics and dead code are removed
+- no unverified claim appears in the final response
+
+If a required item is false, the task is not complete.
+
+## 13. Known Technical Debt
+
+`FINDINGS.md` currently records large modules, coupling, missing tests, and missing lint/format tooling.
+
+- Do not add unrelated behavior to already large modules when a focused module fits.
+- Do not treat proposed fixes in `FINDINGS.md` as authorization to refactor.
+- Keep technical-debt cleanup separate unless it is required for the requested feature.
+- Add testing or linting only as a dedicated, explicitly requested change with a minimal baseline.
+
+## 14. Change Summary Format
+
+Use focused titles:
+
+```text
+[scope] Imperative description
+```
+
+Examples:
+
+```text
+[physics] Stabilize low-speed stall recovery
+[ui] Prevent repeated camera-mode toggles
+[environment] Dispose weather resources on reset
+```
+
+Final summary:
+
+```text
+Implemented
+- ...
+
+Validated
+- npm run build
+- git diff --check
+- relevant browser checks
+
+Remaining
+- only genuine limitations or follow-up work
+```

@@ -173,8 +173,8 @@ export class HUD {
     const w = window.innerWidth;
     const h = window.innerHeight;
 
-    // Classic cockpit layout
-    const panelY = h - 140;
+    // Classic cockpit layout - moved higher to avoid blocking aircraft view at start
+    const panelY = h - 180;
     const spacing = Math.min(w * 0.2, 240);
     const centerX = w / 2;
 
@@ -189,7 +189,7 @@ export class HUD {
 
     // Heading indicator above attitude
     this._headingPos.x = centerX;
-    this._headingPos.y = panelY - 110;
+    this._headingPos.y = panelY - 130;
   }
 
   private lerp(current: number, target: number, factor: number): number {
