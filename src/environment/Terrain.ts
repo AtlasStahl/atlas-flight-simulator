@@ -85,6 +85,7 @@ export class Terrain {
   private _waterGroup = new THREE.Group();
   private _noise = new SimplexNoise(42);
   private _heightCache = new Map<string, number>();
+  private readonly _maxCacheSize = 10000; // LRU cache limit
 
   // Heightmap parameters
   private readonly _terrainSize = 4000;       // world units
@@ -112,6 +113,11 @@ export class Terrain {
     const key = `${Math.round(x)},${Math.round(z)}`;
     if (this._heightCache.has(key)) return this._heightCache.get(key)!;
     const h = this._rawHeight(x, z);
+    // Evict oldest entry if cache is full (simple LRU approximation)
+    if (this._heightCache.size >= this._maxCacheSize) {
+      const firstKey = this._heightCache.keys().next().value;
+      this._heightCache.delete(firstKey);
+    }
     this._heightCache.set(key, h);
     return h;
   }

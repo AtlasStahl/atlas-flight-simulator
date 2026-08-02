@@ -20,8 +20,16 @@ export class MissionSystem {
   }
 
   createRingMission(scene: THREE.Scene) {
-    // Clear existing rings
-    this._rings.forEach(ring => scene.remove(ring.mesh));
+    // Clear existing rings with proper disposal
+    this._rings.forEach(ring => {
+      scene.remove(ring.mesh);
+      ring.mesh.geometry?.dispose();
+      if (Array.isArray(ring.mesh.material)) {
+        ring.mesh.material.forEach(m => m.dispose());
+      } else {
+        ring.mesh.material?.dispose();
+      }
+    });
     this._rings = [];
     this._score = 0;
     this._startTime = performance.now();

@@ -20,6 +20,20 @@ import { RadarDisplay } from './ui/RadarDisplay';
 import { GameMode, GAME_MODES } from './game/GameMode';
 import { DynamicWater } from './environment/DynamicWater';
 
+// --- Utility ---
+function disposeGroup(group: THREE.Group): void {
+  group.traverse(child => {
+    if (child instanceof THREE.Mesh) {
+      child.geometry?.dispose();
+      if (Array.isArray(child.material)) {
+        child.material.forEach(m => m.dispose());
+      } else {
+        child.material?.dispose();
+      }
+    }
+  });
+}
+
 // --- Three.js Setup ---
 const scene = new THREE.Scene();
 
@@ -111,31 +125,12 @@ function returnToMenu() {
   // Remove aircraft with proper disposal
   if (aircraft) {
     scene.remove(aircraft.group);
-    // Dispose aircraft geometries and materials
-    aircraft.group.traverse(child => {
-      if (child instanceof THREE.Mesh) {
-        child.geometry?.dispose();
-        if (Array.isArray(child.material)) {
-          child.material.forEach(m => m.dispose());
-        } else {
-          child.material?.dispose();
-        }
-      }
-    });
+    disposeGroup(aircraft.group);
     aircraft = null;
   }
   if (engineEffects) {
     scene.remove(engineEffects.group);
-    engineEffects.group.traverse(child => {
-      if (child instanceof THREE.Mesh) {
-        child.geometry?.dispose();
-        if (Array.isArray(child.material)) {
-          child.material.forEach(m => m.dispose());
-        } else {
-          child.material?.dispose();
-        }
-      }
-    });
+    disposeGroup(engineEffects.group);
     engineEffects = null;
   }
   
@@ -154,34 +149,14 @@ function startGame(config: AircraftConfig, weather: string, gameMode: GameMode) 
   selectedWeather = weather;
   selectedGameMode = gameMode;
   
-  console.log('[Game] Starting:', { aircraft: config.type, weather, mode: gameMode });
-  
   // Remove old aircraft with proper disposal
   if (aircraft) {
     scene.remove(aircraft.group);
-    aircraft.group.traverse(child => {
-      if (child instanceof THREE.Mesh) {
-        child.geometry?.dispose();
-        if (Array.isArray(child.material)) {
-          child.material.forEach(m => m.dispose());
-        } else {
-          child.material?.dispose();
-        }
-      }
-    });
+    disposeGroup(aircraft.group);
   }
   if (engineEffects) {
     scene.remove(engineEffects.group);
-    engineEffects.group.traverse(child => {
-      if (child instanceof THREE.Mesh) {
-        child.geometry?.dispose();
-        if (Array.isArray(child.material)) {
-          child.material.forEach(m => m.dispose());
-        } else {
-          child.material?.dispose();
-        }
-      }
-    });
+    disposeGroup(engineEffects.group);
   }
 
   // Create new aircraft
@@ -218,7 +193,6 @@ function startGame(config: AircraftConfig, weather: string, gameMode: GameMode) 
 
   // Setup game mode
   if (gameMode === GameMode.COMBAT) {
-    console.log('[Game] Starting combat mode');
     combatManager.startWave();
   }
 
@@ -331,8 +305,7 @@ function animate() {
     if (controls.cycleCamera) {
       if (cameraCycleTimer <= 0) {
         cameraCycleTimer = 0.4;
-        const newMode = cameraManager.cycleMode();
-        console.log('Camera switched to:', newMode);
+        cameraManager.cycleMode();
       }
     }
     cameraCycleTimer -= dt;
