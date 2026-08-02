@@ -39,11 +39,11 @@ export class Controls {
   }
 
   update() {
-    // Pitch: W/S
-    this.pitchUp = this.keys.has('KeyW');
-    this.pitchDown = this.keys.has('KeyS');
+    // Pitch: S=Up (nose up), W=Down (nose down) - standard flight simulator
+    this.pitchUp = this.keys.has('KeyS');
+    this.pitchDown = this.keys.has('KeyW');
 
-    // Roll: A/D
+    // Roll: A=Left wing down, D=Right wing down
     this.rollLeft = this.keys.has('KeyA');
     this.rollRight = this.keys.has('KeyD');
 
