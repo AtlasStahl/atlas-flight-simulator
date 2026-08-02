@@ -16,8 +16,11 @@ export class CombatManager {
     private _score: number = 0;
     private _lastShot: number = 0;
     private _shootCooldown: number = 0.15;
-    private _bulletsAlive: boolean = false;
-    
+
+    // Shared bullet geometry and material (object pooling)
+    private _bulletGeo = new THREE.SphereGeometry(0.3, 4, 4);
+    private _bulletMat = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+
     // Explosion particles
     private _explosions: THREE.Points[] = [];
 
@@ -146,9 +149,8 @@ export class CombatManager {
     }
 
     private _shoot(playerPosition: THREE.Vector3, playerRotation: THREE.Euler): void {
-        const bulletGeo = new THREE.SphereGeometry(0.3, 4, 4);
-        const bulletMat = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
-        const bullet = new THREE.Mesh(bulletGeo, bulletMat);
+        // Clone material to avoid shared state issues, reuse geometry
+        const bullet = new THREE.Mesh(this._bulletGeo, this._bulletMat.clone());
         
         // Position at aircraft nose
         const offset = new THREE.Vector3(3, 0, 0).applyEuler(playerRotation);

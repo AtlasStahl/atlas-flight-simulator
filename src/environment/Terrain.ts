@@ -81,7 +81,6 @@ class SimplexNoise {
 // ============================================================
 /** Terrain with heightmap, airport, mountains, water, vegetation, infrastructure */
 export class Terrain {
-  private _clouds = new THREE.Group();
   private _waterGroup = new THREE.Group();
   private _noise = new SimplexNoise(42);
   private _heightCache = new Map<string, number>();
@@ -90,7 +89,6 @@ export class Terrain {
   // Heightmap parameters
   private readonly _terrainSize = 4000;       // world units
   private readonly _segments = 200;
-  private readonly _maxHeight = 500;
   private readonly _airportX = 1600;
   private readonly _airportZ = 100;
 

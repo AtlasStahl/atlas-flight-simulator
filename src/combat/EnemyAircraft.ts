@@ -10,10 +10,10 @@ export class EnemyAircraft {
     private _maxHealth: number;
     private _alive: boolean;
     private _speed: number;
-    private _targetPosition: THREE.Vector3;
+    private _targetPosition!: THREE.Vector3;
     private _state: 'patrol' | 'attack' | 'retreat';
     private _stateTimer: number;
-    private _waypoints: THREE.Vector3[];
+    private _waypoints!: THREE.Vector3[];
     private _currentWaypoint: number;
     private _homePosition: THREE.Vector3;
     private _playerPosition: THREE.Vector3;
@@ -338,7 +338,7 @@ export class EnemyAircraft {
         return (this._group.userData.explosion as THREE.Points) || null;
     }
 
-    reset(scene: THREE.Scene): void {
+    reset(_scene: THREE.Scene): void {
         this._health = this._maxHealth;
         this._alive = true;
         this._state = 'patrol';
@@ -348,10 +348,23 @@ export class EnemyAircraft {
     }
 
     cleanup(): void {
+        // Dispose trail particles
         if (this._trailParticles) {
             this._group.remove(this._trailParticles);
             this._trailParticles.geometry.dispose();
             (this._trailParticles.material as THREE.PointsMaterial).dispose();
+            this._trailParticles = null;
         }
+        // Dispose all mesh geometries and materials in the group
+        this._group.traverse(child => {
+            if (child instanceof THREE.Mesh) {
+                child.geometry?.dispose();
+                if (Array.isArray(child.material)) {
+                    child.material.forEach(m => m.dispose());
+                } else {
+                    child.material?.dispose();
+                }
+            }
+        });
     }
 }

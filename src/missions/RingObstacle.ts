@@ -34,14 +34,16 @@ export class RingObstacle {
   set passed(value: boolean) { this._passed = value; }
 
   // Check if aircraft has flown through this ring
-  checkPass(aircraftPosition: THREE.Vector3): boolean {
+  checkPass(aircraftPosition: THREE.Vector3, aircraftRadius: number = 3): boolean {
     if (this._passed) return false;
 
     // Calculate distance from ring center
     const dist = this._position.distanceTo(aircraftPosition);
 
-    // Check if within ring radius (with some tolerance)
-    if (dist < this._radius * 1.5) {
+    // Check if within ring radius (with tolerance for aircraft size)
+    // The aircraft passes if its center is within (ringRadius + aircraftRadius)
+    const passThreshold = this._radius + aircraftRadius;
+    if (dist < passThreshold) {
       this._passed = true;
       // Change color to indicate passed
       (this._mesh.material as THREE.MeshStandardMaterial).color.set(0xffff00);

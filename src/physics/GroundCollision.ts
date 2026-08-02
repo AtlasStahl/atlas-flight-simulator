@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import { Aircraft } from '../aircraft/Aircraft';
 import { Controls } from '../input/Controls';
 
@@ -64,21 +65,33 @@ export class GroundCollision {
       // Zero vertical velocity
       aircraft.velocity.y = Math.max(0, aircraft.velocity.y);
 
-      // --- Taxi controls ---
+      // --- Taxi controls (quaternion-based to avoid conflicts with FlightModel) ---
       if (speed > 1) {
         const turnRate = 1.5 * dt;
-        if (controls.rollLeft) aircraft.rotation.z += turnRate;
-        if (controls.rollRight) aircraft.rotation.z -= turnRate;
-        // Keep level on ground
-        aircraft.rotation.x *= 0.95;
-        aircraft.rotation.y *= 0.95;
+        const yawAxis = new THREE.Vector3(0, 1, 0);
+        const taxiQuat = new THREE.Quaternion();
+        if (controls.rollLeft) taxiQuat.setFromAxisAngle(yawAxis, turnRate);
+        if (controls.rollRight) taxiQuat.setFromAxisAngle(yawAxis, -turnRate);
+        if (!controls.rollLeft && !controls.rollRight) {
+          // Keep level on ground (gentle damping)
+          aircraft.rotation.x *= 0.95;
+          aircraft.rotation.y *= 0.95;
+        } else {
+          // Apply taxi rotation via quaternion
+          aircraft.group.quaternion.multiply(taxiQuat);
+          aircraft.rotation.setFromQuaternion(aircraft.group.quaternion, 'YXZ');
+          // Keep level on ground
+          aircraft.rotation.x *= 0.95;
+          aircraft.rotation.y *= 0.95;
+        }
       }
 
       // --- Takeoff: pitch up (nose up) at rotate speed ---
       if (speed >= aircraft.config.rotateSpeed * 0.8 && controls.pitchUp) {
         this._taxiMode = false;
-        aircraft.velocity.y = 3; // Initial upward velocity
-        aircraft.position.y = groundY + 2;
+        // Smooth takeoff: give initial upward velocity based on speed excess
+        const excessSpeed = speed - aircraft.config.rotateSpeed * 0.8;
+        aircraft.velocity.y = Math.max(aircraft.velocity.y, 1.5 + excessSpeed * 0.05);
         return;
       }
 
@@ -103,9 +116,12 @@ export class GroundCollision {
 
     this._crashTimer -= dt;
     if (this._crashTimer > 0) {
-      // Slowly rotate forward
-      aircraft.rotation.x += dt * 0.5;
-      aircraft.rotation.x = Math.min(aircraft.rotation.x, Math.PI / 3);
+      // Slowly rotate forward using quaternion (around local right axis)
+      const forwardAxis = new THREE.Vector3(1, 0, 0).applyEuler(aircraft.rotation);
+      const crashQuat = new THREE.Quaternion();
+      crashQuat.setFromAxisAngle(forwardAxis, dt * 0.5);
+      aircraft.group.quaternion.multiply(crashQuat);
+      aircraft.rotation.setFromQuaternion(aircraft.group.quaternion, 'YXZ');
     }
   }
 

@@ -131,7 +131,7 @@ export class AdvancedMenu {
             line-height: 1.6;
         `;
         controls.innerHTML = `
-            <strong>Steuerung</strong> | Pitch: W/S | Roll: A/D | Yaw: ←/→ | Throttle: ↑/↓<br>
+            <strong>Steuerung</strong> | Pitch: S=hoch, W=niedrig | Roll: A/D | Yaw: ←/→ | Throttle: ↑/↓<br>
             Kamera: C | Schießen: Space/V | Menü: ESC
         `;
         this._container.appendChild(controls);

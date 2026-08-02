@@ -23,16 +23,16 @@ export class FlightModel {
   private _right = new THREE.Vector3(0, 0, -1);
   private _velocityDir = new THREE.Vector3();
   private _liftDir = new THREE.Vector3();
-  private _aoaUp = new THREE.Vector3();
 
-  // Object pooling - reusable temp vectors to reduce GC pressure
-  private _tempVec1 = new THREE.Vector3();
-  private _tempVec2 = new THREE.Vector3();
-  private _tempVec3 = new THREE.Vector3();
-  private _tempQuat1 = new THREE.Quaternion();
-  private _tempQuat2 = new THREE.Quaternion();
-  private _tempQuat3 = new THREE.Quaternion();
-  private _tempQuat4 = new THREE.Quaternion();
+  // Object pooling - dedicated temp vectors per calculation to avoid shared reference bugs
+  private _tempVecLiftDir = new THREE.Vector3();
+  private _tempVecForwardSpeed = new THREE.Vector3();
+  private _tempVecPosition = new THREE.Vector3();
+  private _tempQuatRoll = new THREE.Quaternion();
+  private _tempQuatPitch = new THREE.Quaternion();
+  private _tempQuatYaw = new THREE.Quaternion();
+  private _tempQuatCombined = new THREE.Quaternion();
+  private _tempQuatTurn = new THREE.Quaternion();
   private _turnAxis = new THREE.Vector3(0, 1, 0);
   private _lateralVelocity = new THREE.Vector3();
   private _acceleration = new THREE.Vector3();
@@ -64,9 +64,8 @@ export class FlightModel {
     //  reference plane (forward × right = local "down" of wing)
     // ============================================================
     let aoa = 0; // radians
-    let liftPerpToWing = 1.0; // how much lift is perpendicular to velocity
 
-    if (speed > 0.5) {
+    if (speed > 0.3) {
       this._velocityDir.copy(aircraft.velocity).normalize();
 
       // Project velocity onto the aircraft's pitch-plane (forward + up)
@@ -81,6 +80,10 @@ export class FlightModel {
 
       // Clamp AoA to reasonable range
       aoa = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, aoa));
+
+      // Smooth transition at low speed to avoid lift spikes
+      const speedBlend = Math.min(1, (speed - 0.3) / 3.0);
+      aoa *= speedBlend;
     }
 
     // ============================================================
@@ -107,19 +110,12 @@ export class FlightModel {
 
     // Lift direction: perpendicular to velocity in the pitch plane
     if (speed > 0.5) {
-      // Lift is perpendicular to velocity, in the plane defined by
-      // aircraft forward and up. General direction is "up" relative
-      // to the aircraft's wing plane.
-      this._liftDir.copy(this._up)
-        .sub(this._tempVec1.copy(this._forward).multiplyScalar(this._up.dot(this._forward)))
-        .normalize();
-      // Ensure lift points in the "up" direction relative to velocity
-      // Simpler: lift is roughly in aircraft's "up" direction
+      // Lift is roughly in aircraft's "up" direction
       // but corrected to be perpendicular to velocity
       this._liftDir.copy(this._up);
       // Remove component along velocity
       const upAlongVel = this._liftDir.dot(this._velocityDir);
-      this._liftDir.sub(this._tempVec1.copy(this._velocityDir).multiplyScalar(upAlongVel));
+      this._liftDir.sub(this._tempVecLiftDir.copy(this._velocityDir).multiplyScalar(upAlongVel));
       if (this._liftDir.lengthSq() < 0.0001) {
         // Velocity is parallel to up – use right cross velocity
         this._liftDir.crossVectors(this._right, this._velocityDir);
@@ -170,29 +166,45 @@ export class FlightModel {
     //  Bank-to-Turn Physics – when aircraft is rolled (banked),
     //  lift creates a horizontal component that turns the aircraft.
     //  This is the PRIMARY way aircraft change direction.
+    //
+    //  Bank angle is extracted from the aircraft's quaternion by
+    //  projecting the local up vector onto the world horizontal plane.
+    //  This avoids the gimbal lock issues with Euler rotation.z.
     // ============================================================
     if (speed > 5) {
-      // Get bank angle (roll angle around forward axis)
-      // With Euler order 'YXZ', rotation.z is the roll/bank angle
-      const bankAngle = aircraft.rotation.z;
+      // Extract bank angle from quaternion (correct method, no gimbal lock)
+      // Transform local up to world space, then find the angle between
+      // world up and the aircraft's tilted up vector projected on horizontal
+      const worldUp = new THREE.Vector3(0, 1, 0);
+      const aircraftUp = this._up.clone();
+      // Project aircraft up onto horizontal plane
+      const aircraftUpHorizontal = aircraftUp.clone().sub(worldUp.multiplyScalar(aircraftUp.y));
+      // Bank angle: angle between forward and the horizontal component of up
+      // When banked right, up tilts right, so forward x horizontal gives bank
+      const forwardHorizontal = this._forward.clone().sub(worldUp.multiplyScalar(this._forward.y));
+      if (forwardHorizontal.lengthSq() > 0.001 && aircraftUpHorizontal.lengthSq() > 0.001) {
+        const bankAngle = Math.atan2(
+          aircraftUpHorizontal.normalize().dot(forwardHorizontal.normalize().cross(worldUp)),
+          aircraftUpHorizontal.normalize().dot(forwardHorizontal.normalize())
+        );
+        // Standard rate turn: ~3°/s at 25° bank
+        const turnRate = Math.sin(bankAngle) * (GRAVITY / speed) * 1.5;
 
-      // Horizontal turn rate: stronger response to bank angle
-      const turnRate = Math.sin(bankAngle) * (GRAVITY / speed) * 2.5; // Increased from 0.8 to 2.5
+        // Rotate velocity vector around world Y axis (turn)
+        this._tempQuatTurn.setFromAxisAngle(this._turnAxis, turnRate * dt);
+        aircraft.velocity.applyQuaternion(this._tempQuatTurn);
+      }
 
-      // Rotate velocity vector around world Y axis (turn)
-      this._tempQuat1.setFromAxisAngle(this._turnAxis, turnRate * dt);
-      aircraft.velocity.applyQuaternion(this._tempQuat1);
-
-      // Aerodynamic alignment - much weaker so bank-to-turn works
+      // Aerodynamic alignment - weak so bank-to-turn dominates
       const forwardSpeed = aircraft.velocity.dot(this._forward);
       this._lateralVelocity.copy(aircraft.velocity)
-        .sub(this._tempVec1.copy(this._forward).multiplyScalar(forwardSpeed));
+        .sub(this._tempVecForwardSpeed.copy(this._forward).multiplyScalar(forwardSpeed));
 
-      // Very weak alignment - let bank-to-turn dominate
+      // Weak alignment - let bank-to-turn dominate
       const alignmentStrength = Math.min(0.3, 0.1 + speed * 0.002);
       this._lateralVelocity.multiplyScalar(1 - alignmentStrength * dt * 3);
 
-      aircraft.velocity.copy(this._tempVec1.copy(this._forward).multiplyScalar(forwardSpeed)).add(this._lateralVelocity);
+      aircraft.velocity.copy(this._tempVecForwardSpeed.copy(this._forward).multiplyScalar(forwardSpeed)).add(this._lateralVelocity);
     }
 
     // ============================================================
@@ -218,11 +230,12 @@ export class FlightModel {
     }
 
     // Input mapping
-    // Roll: invert so A=left wing down (negative roll), D=right wing down (positive roll)
-    const rollInput = (controls.rollLeft ? 1 : 0) - (controls.rollRight ? 1 : 0);
-    // Negate pitch: pitchUp (S key) should raise nose → negative rotation around right axis
-    const pitchInput = (controls.pitchDown ? 1 : 0) - (controls.pitchUp ? 1 : 0);
-    const yawInput = (controls.yawRight ? 1 : 0) - (controls.yawLeft ? 1 : 0);
+    // Roll: A=left wing down (negative roll), D=right wing down (positive roll)
+    const rollInput = (controls.rollLeft ? -1 : 0) + (controls.rollRight ? 1 : 0);
+    // Pitch: S=pitch up (nose up), W=pitch down (nose down)
+    const pitchInput = (controls.pitchUp ? -1 : 0) + (controls.pitchDown ? 1 : 0);
+    // Yaw: ArrowLeft=yaw left, ArrowRight=yaw right
+    const yawInput = (controls.yawLeft ? -1 : 0) + (controls.yawRight ? 1 : 0);
 
     // Angular rates (rad/s) - apply full rate at cruise, scaled by controlFactor
     const rollRate = rollInput * (aircraft.config.rollRate * Math.PI / 180) * controlFactor;
@@ -231,15 +244,15 @@ export class FlightModel {
 
     // Apply rotations in LOCAL space using quaternions
     // Roll around FORWARD axis (nose-to-tail)
-    // Pitch around RIGHT axis (wing-to-wing, negated for correct direction)
+    // Pitch around RIGHT axis (wing-to-wing)
     // Yaw around UP axis (bottom-to-top)
-    this._tempQuat1.setFromAxisAngle(this._forward, rollRate * dt);
-    this._tempQuat2.setFromAxisAngle(this._right, pitchRate * dt);
-    this._tempQuat3.setFromAxisAngle(this._up, yawRate * dt);
+    this._tempQuatRoll.setFromAxisAngle(this._forward, rollRate * dt);
+    this._tempQuatPitch.setFromAxisAngle(this._right, pitchRate * dt);
+    this._tempQuatYaw.setFromAxisAngle(this._up, yawRate * dt);
 
     // Combine and apply in local space (post-multiply)
-    this._tempQuat4.copy(this._tempQuat1).multiply(this._tempQuat2).multiply(this._tempQuat3);
-    aircraft.group.quaternion.multiply(this._tempQuat4);
+    this._tempQuatCombined.copy(this._tempQuatRoll).multiply(this._tempQuatPitch).multiply(this._tempQuatYaw);
+    aircraft.group.quaternion.multiply(this._tempQuatCombined);
 
     // Sync Euler rotation from quaternion
     aircraft.rotation.setFromQuaternion(aircraft.group.quaternion, 'YXZ');
@@ -247,7 +260,7 @@ export class FlightModel {
     // ============================================================
     //  Integrate position
     // ============================================================
-    aircraft.position.add(this._tempVec1.copy(aircraft.velocity).multiplyScalar(dt));
+    aircraft.position.add(this._tempVecPosition.copy(aircraft.velocity).multiplyScalar(dt));
 
     // Safety floor – prevent going too far underground
     if (aircraft.position.y < -10) {
@@ -257,5 +270,17 @@ export class FlightModel {
 
     // --- Flaps ---
     aircraft.flapsDeployed = controls.flaps;
+  }
+
+  /** Reset flight model state for game restart */
+  reset() {
+    this._lift.set(0, 0, 0);
+    this._drag.set(0, 0, 0);
+    this._thrust.set(0, 0, 0);
+    this._weight.set(0, 0, 0);
+    this._acceleration.set(0, 0, 0);
+    this._velocityDir.set(0, 0, 0);
+    this._liftDir.set(0, 0, 0);
+    this._lateralVelocity.set(0, 0, 0);
   }
 }

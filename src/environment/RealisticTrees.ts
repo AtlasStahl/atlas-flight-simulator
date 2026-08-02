@@ -457,17 +457,5 @@ export class RealisticTrees {
     );
   }
 
-  /** Return a slightly varied THREE.Color from base RGB */
-  private _varyColor(
-    r: number,
-    g: number,
-    b: number,
-    variance: number
-  ): THREE.Color {
-    return new THREE.Color(
-      Math.max(0, Math.min(1, r + (Math.random() - 0.5) * variance)),
-      Math.max(0, Math.min(1, g + (Math.random() - 0.5) * variance)),
-      Math.max(0, Math.min(1, b + (Math.random() - 0.5) * variance))
-    );
-  }
+  // _varyColor method removed (unused)
 }

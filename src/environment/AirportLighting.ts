@@ -43,7 +43,7 @@ export class AirportLighting {
 
     setIntensity(intensity: number) {
         this._lights.traverse((child) => {
-            if (child.isMesh && 'emissiveIntensity' in child.material) {
+            if (child instanceof THREE.Mesh && 'emissiveIntensity' in child.material) {
                 (child.material as THREE.MeshStandardMaterial).emissiveIntensity = intensity;
             }
         });

@@ -505,7 +505,6 @@ export class Aircraft {
     const bellyMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.3, roughness: 0.5 });
     const darkMat = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.7, roughness: 0.25 });
     const engineMat = new THREE.MeshStandardMaterial({ color: 0x555555, metalness: 0.8, roughness: 0.2 });
-    const glassMat = new THREE.MeshStandardMaterial({ color: 0x446688, transparent: true, opacity: 0.35, metalness: 0.05, roughness: 0.05 });
     const cockpitGlassMat = new THREE.MeshStandardMaterial({ color: 0x557799, transparent: true, opacity: 0.4, metalness: 0.1, roughness: 0.08 });
     const tireMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.95, metalness: 0.0 });
     const rimMat = new THREE.MeshStandardMaterial({ color: 0xbbbbbb, metalness: 0.8, roughness: 0.2 });
@@ -1428,8 +1427,6 @@ export class Aircraft {
       metalness: 0.05,
       roughness: 0.05
     });
-    const metalMat = new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.9, roughness: 0.15 });
-    const darkMetalMat = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.85, roughness: 0.25 });
     const exhaustMat = new THREE.MeshStandardMaterial({
       color: 0xff6600,
       emissive: 0xff4400,
