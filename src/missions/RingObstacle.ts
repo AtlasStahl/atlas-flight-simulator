@@ -5,11 +5,13 @@ export class RingObstacle {
   private _mesh: THREE.Mesh;
   private _position: THREE.Vector3;
   private _radius: number;
+  private _rotationY: number;
   private _passed: boolean = false;
 
   constructor(scene: THREE.Scene, position: THREE.Vector3, radius: number, rotationY: number = 0) {
     this._position = position;
     this._radius = radius;
+    this._rotationY = rotationY;
 
     // Create ring using TorusGeometry
     const geometry = new THREE.TorusGeometry(radius, 1.5, 8, 32);
@@ -44,22 +46,30 @@ export class RingObstacle {
     }
   }
 
-  // Check if aircraft has flown through this ring
+  // Check if aircraft has flown through this ring (plane-based test, not sphere)
   checkPass(aircraftPosition: THREE.Vector3, aircraftRadius: number = 3): boolean {
     if (this._passed) return false;
 
-    // Calculate distance from ring center
-    const dist = this._position.distanceTo(aircraftPosition);
-
-    // Check if within ring radius (with tolerance for aircraft size)
-    // The aircraft passes if its center is within (ringRadius + aircraftRadius)
-    const passThreshold = this._radius + aircraftRadius;
-    if (dist < passThreshold) {
-      this._passed = true;
-      // Change color to indicate passed
-      (this._mesh.material as THREE.MeshStandardMaterial).color.set(0xffff00);
-      (this._mesh.material as THREE.MeshStandardMaterial).emissive.set(0xffff00);
-      return true;
+    // Ring normal from rotationY: ring lies in YZ plane rotated around Y
+    const normal = new THREE.Vector3(1, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), this._rotationY);
+    const toAircraft = new THREE.Vector3().subVectors(aircraftPosition, this._position);
+    
+    // Distance from ring center projected onto ring plane
+    const distToPlane = toAircraft.dot(normal);
+    
+    // Check if aircraft is close enough to the ring plane
+    if (Math.abs(distToPlane) < this._radius + aircraftRadius) {
+      // Project aircraft position onto ring plane
+      const projected = new THREE.Vector3().copy(toAircraft).sub(normal.multiplyScalar(distToPlane));
+      const radialDist = projected.length();
+      
+      // Check if within ring radius
+      if (radialDist < this._radius + aircraftRadius) {
+        this._passed = true;
+        (this._mesh.material as THREE.MeshStandardMaterial).color.set(0xffff00);
+        (this._mesh.material as THREE.MeshStandardMaterial).emissive.set(0xffff00);
+        return true;
+      }
     }
     return false;
   }

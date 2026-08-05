@@ -9,6 +9,7 @@ import { CameraManager } from './camera/CameraManager';
 import { Controls } from './input/Controls';
 import { HUD } from './ui/HUD';
 import { AdvancedMenu } from './ui/AdvancedMenu';
+import type { GameState } from './core/GameState';
 import { MissionSystem } from './missions/MissionSystem';
 import { PostProcessingManager } from './rendering/PostProcessing';
 import { Atmosphere } from './rendering/Atmosphere';
@@ -37,7 +38,7 @@ function disposeGroup(group: THREE.Group): void {
 const scene = new THREE.Scene();
 
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 20000);
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const renderer = new THREE.WebGLRenderer({ antialias: false }); // SMAAPass in post-processing handles anti-aliasing (REN-02)
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
@@ -66,8 +67,13 @@ const terrain = new Terrain(scene);
 const runway = new Runway(scene);
 const missionSystem = new MissionSystem(scene);
 
-// --- Dynamic Water (far from runway, near distant lakes) ---
-const dynamicWater = new DynamicWater(scene, new THREE.Vector3(1500, 2, 1200), 300);
+// --- Dynamic Water (REN-05: Position und Größe aus dem See-Becken des Terrains) ---
+const lake = terrain.lake;
+const dynamicWater = new DynamicWater(
+  scene,
+  new THREE.Vector3(lake.x, lake.waterLevel, lake.z),
+  lake.radius
+);
 
 // --- Atmosphere & Post-Processing ---
 const atmosphere = new Atmosphere(scene, sunLight.position);
@@ -100,6 +106,29 @@ const runwayBounds = runway.bounds;
 const startPos = new THREE.Vector3(-600, 1.5, 0); // On runway surface (y=1.5)
 const startRot = new THREE.Euler(0, 0, 0, 'YXZ');
 
+// ARCH-04: Gemeinsame Teardown-Funktion für Flugzeug und EngineEffects
+function teardownFlight() {
+  // EngineEffects zuerst vom aircraft.group lösen (ARCH-03: kein doppeltes dispose)
+  if (engineEffects) {
+    engineEffects.dispose();
+    engineEffects = null;
+  }
+  if (aircraft) {
+    scene.remove(aircraft.group);
+    disposeGroup(aircraft.group);
+    aircraft = null;
+  }
+}
+
+// ARCH-02: Vollständiger Teardown beim Verlassen der Seite
+function disposeAll() {
+  teardownFlight();
+  controls.dispose();
+  postProcessing.dispose();
+  dynamicWater.dispose(scene);
+  atmosphere.dispose(scene);
+}
+
 function returnToMenu() {
   // Hide HUD
   if (hud) {
@@ -118,20 +147,11 @@ function returnToMenu() {
     weatherSystem = null;
   }
 
-  // Remove aircraft with proper disposal
-  if (aircraft) {
-    scene.remove(aircraft.group);
-    disposeGroup(aircraft.group);
-    aircraft = null;
-  }
-  if (engineEffects) {
-    scene.remove(engineEffects.group);
-    disposeGroup(engineEffects.group);
-    engineEffects = null;
-  }
+  // ARCH-04: Gemeinsame Teardown-Funktion
+  teardownFlight();
 
   // Reset flight model state
-  flightModel.reset?.();
+  flightModel.reset();
 
   // Dispose mission rings
   missionSystem.clearRings(scene);
@@ -140,21 +160,17 @@ function returnToMenu() {
   if (menu) {
     menu.show();
   }
+
+  // Disable controls in menu to prevent stuck keys (INP-02 fix)
+  controls.setEnabled(false);
 }
 
 function startGame(config: AircraftConfig, weather: string, gameMode: GameMode) {
   // Store selected options
   selectedGameMode = gameMode;
 
-  // Remove old aircraft with proper disposal
-  if (aircraft) {
-    scene.remove(aircraft.group);
-    disposeGroup(aircraft.group);
-  }
-  if (engineEffects) {
-    scene.remove(engineEffects.group);
-    disposeGroup(engineEffects.group);
-  }
+  // ARCH-04: Gemeinsame Teardown-Funktion
+  teardownFlight();
 
   // Create new aircraft
   aircraft = new Aircraft(config);
@@ -168,6 +184,9 @@ function startGame(config: AircraftConfig, weather: string, gameMode: GameMode) 
 
   // Engine effects (nav lights attached to aircraft)
   engineEffects = new EngineEffects(aircraft.group);
+
+  // CAM-02: Cockpit-Offset aus AircraftConfig setzen
+  cameraManager.setCockpitOffset(config.cockpitOffset);
 
   // Reset systems
   groundCollision.reset();
@@ -226,6 +245,9 @@ function startGame(config: AircraftConfig, weather: string, gameMode: GameMode) 
   if (menu) {
     menu.hide();
   }
+
+  // Enable controls after starting game (INP-02 fix)
+  controls.setEnabled(true);
 }
 
 // --- Show Advanced Menu ---
@@ -237,6 +259,9 @@ window.addEventListener('keydown', (e) => {
     returnToMenu();
   }
 });
+
+// ARCH-02: disposeAll beim Verlassen der Seite
+window.addEventListener('pagehide', disposeAll);
 
 // --- Handle Camera controls ---
 let isDragging = false;
@@ -283,7 +308,7 @@ window.addEventListener('resize', () => {
 
 // --- Game Loop ---
 let lastTime = performance.now();
-let cameraCycleTimer = 0;
+let cameraCycleTimer = 0.4; // INP-05: Start positiv, damit kein sofortiger Zyklus passiert
 
 function animate() {
   requestAnimationFrame(animate);
@@ -308,30 +333,37 @@ function animate() {
     }
     cameraCycleTimer -= dt;
 
-    // Update flight physics
-    flightModel.update(aircraft, controls, dt);
+    // Update flight physics (ground state owned by GroundCollision, one frame behind)
+    flightModel.update(aircraft, controls, dt, groundCollision.taxiMode);
 
-// Update weather effects (very subtle influence, not overwhelming)
+// Apply weather effects as accelerations (m/s²) integrated over dt for frame-rate independence
     if (weatherSystem) {
-      const windEffect = weatherSystem.getWindEffect(aircraft.velocity);
-      const turbulence = weatherSystem.getTurbulence(now / 1000);
-      // Scale down effects significantly so they don't overpower controls
-      aircraft.velocity.add(windEffect.multiplyScalar(0.02));
-      aircraft.velocity.add(turbulence.multiplyScalar(0.05));
+      // Use out-parameter pattern to avoid mutating weatherSystem's internal cached vectors
+      const windEffect = new THREE.Vector3();
+      const turbulence = new THREE.Vector3();
+      weatherSystem.getWindEffect(windEffect);
+      weatherSystem.getTurbulence(turbulence);
+      // Wind/Turbulence are accelerations; integration over dt ensures frame-rate independence
+      aircraft.velocity.addScaledVector(windEffect, 0.02 * dt * 60);
+      aircraft.velocity.addScaledVector(turbulence, 0.05 * dt * 60);
     }
 
     // Update ground collision
     groundCollision.update(aircraft, controls, dt, runwayBounds);
 
-    // Update crash animation
-    groundCollision.updateCrashAnimation(aircraft, dt);
+    // Update crash animation (PHY-12: returns true when crash animation is complete)
+    const crashComplete = groundCollision.updateCrashAnimation(aircraft, dt);
+    if (crashComplete && aircraft.crashed) {
+      // Crash animation done — show restart hint in HUD
+      aircraft.crashed = false; // Allow HUD to show restart overlay
+    }
 
     // Update propeller
     aircraft.updatePropeller(dt);
 
-    // Sync 3D model with physics state
+    // Sync 3D model with physics state (PHY-06: sync from authoritative quaternion)
     aircraft.group.position.copy(aircraft.position);
-    aircraft.group.rotation.copy(aircraft.rotation);
+    aircraft.group.quaternion.copy(aircraft.quaternion);
 
     // Update engine effects
     if (engineEffects) {
@@ -371,14 +403,15 @@ function animate() {
     if (hud) {
       const speed = aircraft.velocity.length();
       const altitude = aircraft.position.y;
-      // Use aircraft rotation for heading when speed is low (prevents wild spinning)
+      // Single heading source: rotation.y (verified against forward vector)
+      // At speed > 5 m/s, derive from velocity (negated atan2 because atan2(vz,vx) === -rotation.y)
       const heading = speed > 5
-        ? Math.atan2(aircraft.velocity.z, aircraft.velocity.x)
+        ? -Math.atan2(aircraft.velocity.z, aircraft.velocity.x)
         : aircraft.rotation.y;
       const verticalSpeed = aircraft.velocity.y;
-      // YXZ Euler order: x=pitch, y=heading, z=roll/bank
-      const pitch = aircraft.rotation.x;
-      const roll = aircraft.rotation.z;
+      // Gimbal-safe attitude from the quaternion — Euler YXZ folds rotation.x at ±90° bank
+      const pitch = aircraft.getPitchAngle();
+      const roll = aircraft.getBankAngle();
 
       // Only pass missionStatus in ring_mission mode
       const missionData = selectedGameMode === GameMode.RING_MISSION ? missionStatus : undefined;
@@ -392,33 +425,44 @@ function animate() {
         totalEnemies: combatManager.totalEnemiesInWave
       } : undefined;
 
-      hud.update(
+      // UI-01: GameState-Objekt statt 13 Positionsparametern
+      const gameState: GameState = {
+        aircraftType: aircraft.config.type,
         speed,
         altitude,
         heading,
-        aircraft.throttle,
+        throttle: aircraft.throttle,
         verticalSpeed,
         pitch,
         roll,
-        groundCollision.taxiMode,
-        aircraft.crashed,
-        missionData,
-        cameraManager.mode,
-        combatData
-      );
+        onGround: groundCollision.taxiMode,
+        crashed: aircraft.crashed,
+        gameMode: selectedGameMode,
+        cameraMode: cameraManager.mode,
+        missionStatus: missionData,
+        combatStatus: combatData
+      };
+      hud.update(dt, gameState);
     }
 
-    // Update radar
+    // Update radar with alive enemy positions (GAME-04 fix)
     if (radar && selectedGameMode === GameMode.COMBAT) {
-      radar.update(aircraft.position, Math.atan2(aircraft.velocity.z, aircraft.velocity.x));
+      const radarHeading = aircraft.velocity.length() > 5
+        ? -Math.atan2(aircraft.velocity.z, aircraft.velocity.x)
+        : aircraft.rotation.y;
+      radar.clearTargets();
+      for (const enemy of combatManager.aliveEnemies) {
+        radar.addTarget(enemy.position, 'enemy');
+      }
+      radar.update(aircraft.position, radarHeading);
     }
   }
 
   // Update terrain/clouds
   terrain.update(dt);
 
-  // Update dynamic water
-  dynamicWater.update(dt);
+  // Update dynamic water with camera position for correct Fresnel reflection
+  dynamicWater.update(dt, camera.position);
 
   // Update atmosphere sky position to follow camera
   atmosphere.updateSkyPosition(camera.position);

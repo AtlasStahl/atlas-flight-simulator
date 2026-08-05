@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { worldRandom } from '../core/Random';
 
 /** Weather configuration */
 export interface WeatherConfig {
@@ -71,6 +72,9 @@ export class WeatherSystem {
 
     // Cloud layers
     private _cloudGroups: THREE.Group[] = [];
+    // REN-06: Geteilte Ressourcen tracken
+    private _puffGeometries: THREE.SphereGeometry[] = [];
+    private _cloudMaterials: THREE.Material[] = [];
 
     // Sky overlay for overcast
     private _skyOverlay: THREE.Mesh | null = null;
@@ -81,6 +85,9 @@ export class WeatherSystem {
     // Cached vectors to avoid per-frame allocation
     private _cachedWindEffect = new THREE.Vector3();
     private _cachedTurbulence = new THREE.Vector3();
+
+    // QA-03: seedbares PRNG für reproduzierbare Wettergenerierung
+    private readonly _random = worldRandom;
 
     constructor(scene: THREE.Scene, config: WeatherConfig = WEATHER_PRESETS.clear) {
         this._scene = scene;
@@ -131,9 +138,9 @@ export class WeatherSystem {
         const spread = 800;
         const height = 300;
         for (let i = 0; i < count; i++) {
-            this._rainPositions[i * 3] = (Math.random() - 0.5) * spread;
-            this._rainPositions[i * 3 + 1] = Math.random() * height;
-            this._rainPositions[i * 3 + 2] = (Math.random() - 0.5) * spread;
+            this._rainPositions[i * 3] = (this._random() - 0.5) * spread;
+            this._rainPositions[i * 3 + 1] = this._random() * height;
+            this._rainPositions[i * 3 + 2] = (this._random() - 0.5) * spread;
         }
 
         geo.setAttribute('position', new THREE.BufferAttribute(this._rainPositions, 3));
@@ -178,46 +185,49 @@ export class WeatherSystem {
             new THREE.SphereGeometry(1, 10, 8),
             new THREE.SphereGeometry(1, 8, 6),
         ];
+        this._puffGeometries = puffGeometries;
 
         for (let l = 0; l < layers; l++) {
             const group = new THREE.Group();
             const altitude = 250 + l * 120; // Better altitude distribution
 
-            // Cloud material - use MeshBasicMaterial to avoid picking up environment color
+            // Cloud material — one per layer, tracked for single dispose
             const cloudMat = new THREE.MeshBasicMaterial({
                 color: 0xffffff,
                 transparent: true,
                 opacity: 0.7 + l * 0.05,
                 depthWrite: false,
             });
+            this._cloudMaterials.push(cloudMat);
 
             for (let i = 0; i < cloudsPerLayer; i++) {
                 // Each cloud is a cluster of spheres for fluffy volumetric look
                 const cloudGroup = new THREE.Group();
-                const numPuffs = 5 + Math.floor(Math.random() * 4); // 5-8 puffs per cloud
+                // QA-03: Reproduzierbare Wolken-Generierung
+                const numPuffs = 5 + Math.floor(this._random() * 4); // 5-8 puffs per cloud
 
                 for (let p = 0; p < numPuffs; p++) {
-                    const size = 15 + Math.random() * 35; // Larger puffs for better visibility from below
-                    const geoIdx = Math.floor(Math.random() * puffGeometries.length);
+                    const size = 15 + this._random() * 35; // Larger puffs for better visibility from below
+                    const geoIdx = Math.floor(this._random() * puffGeometries.length);
                     const puff = new THREE.Mesh(puffGeometries[geoIdx], cloudMat);
 
                     // Position puffs in a more horizontal spread (wider, less tall) for better viewing from below
                     puff.position.set(
-                        (Math.random() - 0.5) * 50, // Wider horizontal spread
-                        (Math.random() - 0.5) * 8,  // Flatter vertical profile
-                        (Math.random() - 0.5) * 50  // Wider depth spread
+                        (this._random() - 0.5) * 50, // Wider horizontal spread
+                        (this._random() - 0.5) * 8,  // Flatter vertical profile
+                        (this._random() - 0.5) * 50  // Wider depth spread
                     );
                     // Equal scaling for round appearance
-                    const scale = size * (0.8 + Math.random() * 0.4);
+                    const scale = size * (0.8 + this._random() * 0.4);
                     puff.scale.set(scale, scale * 0.7, scale); // Slightly flattened for natural look
                     cloudGroup.add(puff);
                 }
 
                 // Position clouds in a large area around the aircraft
                 cloudGroup.position.set(
-                    (Math.random() - 0.5) * 6000,
-                    altitude + Math.random() * 40,
-                    (Math.random() - 0.5) * 6000
+                    (this._random() - 0.5) * 6000,
+                    altitude + this._random() * 40,
+                    (this._random() - 0.5) * 6000
                 );
 
                 group.add(cloudGroup);
@@ -229,20 +239,20 @@ export class WeatherSystem {
     }
 
     private _removeClouds(): void {
+        // REN-06: scene.remove auf Group detachiert alle Kinder automatisch.
+        // Geteilte Ressourcen (Geometrien/Materialien) genau einmal freigeben.
         for (const group of this._cloudGroups) {
             this._scene.remove(group);
-            group.traverse(child => {
-                if (child instanceof THREE.Mesh) {
-                    child.geometry.dispose();
-                    if (Array.isArray(child.material)) {
-                        child.material.forEach(m => m.dispose());
-                    } else {
-                        child.material?.dispose();
-                    }
-                }
-            });
         }
         this._cloudGroups = [];
+        for (const geo of this._puffGeometries) {
+            geo.dispose();
+        }
+        this._puffGeometries = [];
+        for (const mat of this._cloudMaterials) {
+            mat.dispose();
+        }
+        this._cloudMaterials = [];
     }
 
     private _createSkyOverlay(): void {
@@ -294,28 +304,48 @@ export class WeatherSystem {
                 this._rainPositions[i * 3 + 1] -= rainSpeed * dt;
                 this._rainPositions[i * 3 + 2] += windZ * dt;
 
-                // Reset if below ground or too far
+                // Reset if below ground or too far from aircraft (REN-07: Weltkoordinaten, kein doppelter Offset)
                 if (this._rainPositions[i * 3 + 1] < 0 ||
                     Math.abs(this._rainPositions[i * 3] - aircraftPos.x) > 1000 ||
                     Math.abs(this._rainPositions[i * 3 + 2] - aircraftPos.z) > 1000) {
-                    this._rainPositions[i * 3] = aircraftPos.x + (Math.random() - 0.5) * 2000;
-                    this._rainPositions[i * 3 + 1] = 200 + Math.random() * 300;
-                    this._rainPositions[i * 3 + 2] = aircraftPos.z + (Math.random() - 0.5) * 2000;
+                    // QA-03: Reproduzierbare Regen-Reset-Positionen
+                    this._rainPositions[i * 3] = aircraftPos.x + (this._random() - 0.5) * 2000;
+                    this._rainPositions[i * 3 + 1] = 200 + this._random() * 300;
+                    this._rainPositions[i * 3 + 2] = aircraftPos.z + (this._random() - 0.5) * 2000;
                 }
             }
 
             this._rainGeometry.attributes.position.needsUpdate = true;
         }
 
-        // Move rain container to follow aircraft
-        if (this._rainParticles) {
-            this._rainParticles.position.copy(aircraftPos);
-        }
+        // REN-07: Regen-Container bleibt bei (0,0,0) — Partikel sind in Weltkoordinaten
+        // (früher: this._rainParticles.position.copy(aircraftPos) — doppelter Offset)
 
-        // Drift clouds slowly
+        // Drift clouds and wrap around aircraft (REN-06: Wolkenfeld folgt Flugzeug)
+        // Groups don't drift — individual clouds drift within group bounds and wrap.
+        // This avoids accumulated group offset breaking the wrap check.
+        const WIND_DRIFT = 0.1;
+        const CLOUD_WRAP_HALF = 3000; // half of the 6000 spread used during creation
         for (const group of this._cloudGroups) {
-            group.position.x += Math.cos(this._config.windDirection) * this._config.windSpeed * dt * 0.1;
-            group.position.z += Math.sin(this._config.windDirection) * this._config.windSpeed * dt * 0.1;
+            // Snap group to aircraft so wrap stays relative
+            group.position.x = aircraftPos.x;
+            group.position.z = aircraftPos.z;
+
+            for (const cloud of group.children) {
+                // Drift
+                cloud.position.x += Math.cos(this._config.windDirection) * this._config.windSpeed * dt * WIND_DRIFT;
+                cloud.position.z += Math.sin(this._config.windDirection) * this._config.windSpeed * dt * WIND_DRIFT;
+
+                // Wrap X relative to group center (= aircraft)
+                const dx = cloud.position.x;
+                if (dx > CLOUD_WRAP_HALF) cloud.position.x -= CLOUD_WRAP_HALF * 2;
+                else if (dx < -CLOUD_WRAP_HALF) cloud.position.x += CLOUD_WRAP_HALF * 2;
+
+                // Wrap Z relative to group center (= aircraft)
+                const dz = cloud.position.z;
+                if (dz > CLOUD_WRAP_HALF) cloud.position.z -= CLOUD_WRAP_HALF * 2;
+                else if (dz < -CLOUD_WRAP_HALF) cloud.position.z += CLOUD_WRAP_HALF * 2;
+            }
         }
 
         // Move sky overlay
@@ -324,23 +354,16 @@ export class WeatherSystem {
         }
     }
 
-    /** Get wind effect on aircraft physics */
-    getWindEffect(velocity: THREE.Vector3): THREE.Vector3 {
-        this._cachedWindEffect.copy(this._windVector).sub(velocity).multiplyScalar(0.01);
-        return this._cachedWindEffect;
+    /** Get wind effect on aircraft physics — out-parameter pattern to avoid mutating internal state */
+    getWindEffect(out: THREE.Vector3): THREE.Vector3 {
+        out.copy(this._cachedWindEffect);
+        return out;
     }
 
-    /** Get turbulence force */
-    getTurbulence(time: number): THREE.Vector3 {
-        if (this._turbulence <= 0) return this._cachedTurbulence.set(0, 0, 0);
-
-        const turb = this._turbulence * 2;
-        this._cachedTurbulence.set(
-            Math.sin(time * 3.7) * turb,
-            Math.sin(time * 5.3) * turb * 0.5,
-            Math.cos(time * 4.1) * turb
-        );
-        return this._cachedTurbulence;
+    /** Get turbulence force — out-parameter pattern to avoid mutating internal state */
+    getTurbulence(out: THREE.Vector3): THREE.Vector3 {
+        out.copy(this._cachedTurbulence);
+        return out;
     }
 
     cleanup(): void {

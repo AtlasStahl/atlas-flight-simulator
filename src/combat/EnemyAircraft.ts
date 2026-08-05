@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { worldRandom } from '../core/Random';
 
 /** Enemy aircraft AI with waypoint navigation and attack behavior */
 export class EnemyAircraft {
@@ -21,6 +22,15 @@ export class EnemyAircraft {
     private _color: number;
     private _scale: number;
     private _trailParticles: THREE.Points | null = null;
+    private _hitFlashTimer: number = 0;
+    private _originalColors: Map<THREE.Mesh, number> = new Map();
+    // REN-10: Wiederverwendbare Vektoren für Hot-Path
+    private readonly _tmpDir = new THREE.Vector3();
+    private readonly _tmpVel = new THREE.Vector3();
+    private readonly _tmpTargetRot = new THREE.Euler(0, 0, 0, 'YXZ');
+
+    // QA-03: seedbares PRNG für reproduzierbare Waypoints
+    private readonly _random = worldRandom;
 
     constructor(scene: THREE.Scene, position: THREE.Vector3, config?: { speed?: number, health?: number }) {
         this._position = position.clone();
@@ -54,6 +64,14 @@ export class EnemyAircraft {
     get maxHealth(): number { return this._maxHealth; }
     get alive(): boolean { return this._alive; }
     get state(): string { return this._state; }
+    get explosionComplete(): boolean { return !this._alive && this._hitFlashTimer <= 0 && this._group.visible === false; }
+
+    /** Explosion-Referenz zurückgeben und löschen (RES-03: kein doppelter Besitz) */
+    getExplosion(): THREE.Points | null {
+      const explosion = this._group.userData.explosion as THREE.Points | undefined;
+      delete this._group.userData.explosion;
+      return explosion ?? null;
+    }
 
     private _createModel(): THREE.Group {
         const group = new THREE.Group();
@@ -142,7 +160,7 @@ export class EnemyAircraft {
             const angle = (i / numWaypoints) * Math.PI * 2;
             const wp = new THREE.Vector3(
                 this._homePosition.x + Math.cos(angle) * radius,
-                100 + Math.random() * 200,
+                100 + this._random() * 200,
                 this._homePosition.z + Math.sin(angle) * radius
             );
             this._waypoints.push(wp);
@@ -201,44 +219,47 @@ export class EnemyAircraft {
 
     private _updatePatrol(dt: number): void {
         const target = this._waypoints[this._currentWaypoint];
-        const dir = new THREE.Vector3().subVectors(target, this._position);
+        this._tmpDir.subVectors(target, this._position);
 
-        if (dir.length() < 20) {
+        if (this._tmpDir.length() < 20) {
             this._currentWaypoint = (this._currentWaypoint + 1) % this._waypoints.length;
             return;
         }
 
-        dir.normalize();
-        this._velocity.copy(dir.multiplyScalar(this._speed));
-        this._position.add(this._velocity.clone().multiplyScalar(dt));
+        this._tmpDir.normalize();
+        this._velocity.copy(this._tmpDir.multiplyScalar(this._speed));
+        this._tmpVel.copy(this._velocity).multiplyScalar(dt);
+        this._position.add(this._tmpVel);
 
         // Smooth rotation towards velocity
-        const targetRot = new THREE.Euler(0, Math.atan2(this._velocity.z, this._velocity.x), 0, 'YXZ');
-        this._rotation.y += (targetRot.y - this._rotation.y) * 2 * dt;
+        this._tmpTargetRot.y = Math.atan2(this._velocity.z, this._velocity.x);
+        this._rotation.y += (this._tmpTargetRot.y - this._rotation.y) * 2 * dt;
     }
 
     private _updateAttack(dt: number): void {
         // Move towards player
-        const dir = new THREE.Vector3().subVectors(this._playerPosition, this._position);
-        const dist = dir.length();
+        this._tmpDir.subVectors(this._playerPosition, this._position);
+        const dist = this._tmpDir.length();
 
         if (dist > 100) {
-            dir.normalize();
-            this._velocity.copy(dir.multiplyScalar(this._speed * 1.5));
-            this._position.add(this._velocity.clone().multiplyScalar(dt));
+            this._tmpDir.normalize();
+            this._velocity.copy(this._tmpDir.multiplyScalar(this._speed * 1.5));
+            this._tmpVel.copy(this._velocity).multiplyScalar(dt);
+            this._position.add(this._tmpVel);
         } else {
             // Circle around player
-            const circleDir = new THREE.Vector3(-dir.z, 0, dir.x).normalize();
-            this._velocity.copy(circleDir.multiplyScalar(this._speed));
-            this._position.add(this._velocity.clone().multiplyScalar(dt));
+            this._tmpDir.set(-this._tmpDir.z, 0, this._tmpDir.x).normalize();
+            this._velocity.copy(this._tmpDir.multiplyScalar(this._speed));
+            this._tmpVel.copy(this._velocity).multiplyScalar(dt);
+            this._position.add(this._tmpVel);
         }
 
         // Keep altitude
         this._position.y = Math.max(this._position.y, 50);
 
         // Rotate towards player
-        const targetRot = new THREE.Euler(0, Math.atan2(this._velocity.z, this._velocity.x), 0, 'YXZ');
-        this._rotation.y += (targetRot.y - this._rotation.y) * 3 * dt;
+        this._tmpTargetRot.y = Math.atan2(this._velocity.z, this._velocity.x);
+        this._rotation.y += (this._tmpTargetRot.y - this._rotation.y) * 3 * dt;
 
         if (this._stateTimer <= 0) {
             this._state = 'patrol';
@@ -247,16 +268,16 @@ export class EnemyAircraft {
 
     private _updateRetreat(dt: number): void {
         // Fly away from player
-        const dir = new THREE.Vector3().subVectors(this._position, this._playerPosition);
-        dir.normalize();
-        this._velocity.copy(dir.multiplyScalar(this._speed * 2));
-        this._position.add(this._velocity.clone().multiplyScalar(dt));
+        this._tmpDir.subVectors(this._position, this._playerPosition).normalize();
+        this._velocity.copy(this._tmpDir.multiplyScalar(this._speed * 2));
+        this._tmpVel.copy(this._velocity).multiplyScalar(dt);
+        this._position.add(this._tmpVel);
 
         // Gain altitude
         this._position.y += 50 * dt;
 
-        const targetRot = new THREE.Euler(0, Math.atan2(this._velocity.z, this._velocity.x), 0, 'YXZ');
-        this._rotation.y += (targetRot.y - this._rotation.y) * 2 * dt;
+        this._tmpTargetRot.y = Math.atan2(this._velocity.z, this._velocity.x);
+        this._rotation.y += (this._tmpTargetRot.y - this._rotation.y) * 2 * dt;
 
         if (this._stateTimer <= 0) {
             this._state = 'patrol';
@@ -270,32 +291,35 @@ export class EnemyAircraft {
             this._alive = false;
             this._explode();
         } else {
-            // Flash red
+            // Flash white using timer-based approach (no setTimeout on potentially disposed materials)
+            this._hitFlashTimer = 0.1;
             this._group.traverse(child => {
                 if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial) {
-                    const originalColor = child.material.color.clone();
+                    if (!this._originalColors.has(child)) {
+                        this._originalColors.set(child, child.material.color.getHex());
+                    }
                     child.material.color.setHex(0xffffff);
-                    setTimeout(() => {
-                        child.material.color.copy(originalColor);
-                    }, 100);
                 }
             });
         }
     }
 
-    private _explode(): void {
-        // Simple explosion effect
-        const explosionGeo = new THREE.SphereGeometry(3, 8, 8);
-        const explosionMat = new THREE.MeshBasicMaterial({
-            color: 0xff6600,
-            transparent: true,
-            opacity: 1
-        });
-        const explosion = new THREE.Mesh(explosionGeo, explosionMat);
-        explosion.position.copy(this._position);
+    updateHitFlash(dt: number): void {
+        if (this._hitFlashTimer > 0) {
+            this._hitFlashTimer -= dt;
+            if (this._hitFlashTimer <= 0) {
+                this._group.traverse(child => {
+                    if (child instanceof THREE.Mesh && this._originalColors.has(child)) {
+                        (child.material as THREE.MeshStandardMaterial).color.setHex(this._originalColors.get(child)!);
+                        this._originalColors.delete(child);
+                    }
+                });
+            }
+        }
+    }
 
-        // Add to scene temporarily (parent should handle removal)
-        this._group.remove(explosion);
+    private _explode(): void {
+        // Make group invisible; explosion particles below provide visual feedback
         this._group.visible = false;
 
         // Create explosion particles
@@ -309,10 +333,11 @@ export class EnemyAircraft {
             positions[i * 3 + 1] = this._position.y;
             positions[i * 3 + 2] = this._position.z;
 
+            // QA-03: Reproduzierbare Partikel-Geschwindigkeiten
             velocities.push(new THREE.Vector3(
-                (Math.random() - 0.5) * 100,
-                (Math.random() - 0.5) * 100,
-                (Math.random() - 0.5) * 100
+                (this._random() - 0.5) * 100,
+                (this._random() - 0.5) * 100,
+                (this._random() - 0.5) * 100
             ));
         }
 
@@ -331,10 +356,6 @@ export class EnemyAircraft {
 
         // This will be added to scene by the combat system
         this._group.userData.explosion = particles;
-    }
-
-    getExplosion(): THREE.Points | null {
-        return (this._group.userData.explosion as THREE.Points) || null;
     }
 
     reset(_scene: THREE.Scene): void {

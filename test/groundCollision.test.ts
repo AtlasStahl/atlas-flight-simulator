@@ -8,6 +8,7 @@ class MockAircraft {
   group = new THREE.Group();
   position = new THREE.Vector3(0, 0.5, 0);
   rotation = new THREE.Euler(0, 0, 0, 'YXZ');
+  quaternion = new THREE.Quaternion(); // PHY-06: authoritative quaternion
   velocity = new THREE.Vector3(0, 0, 0);
   throttle = 0;
   crashed = false;
@@ -230,7 +231,7 @@ describe('GroundCollision', () => {
 
   describe('terrain height function', () => {
     it('should use custom terrain height', () => {
-      const terrainHeight = (x: number, z: number) => 50; // 50m plateau
+      const terrainHeight = (_x: number, _z: number) => 50; // 50m plateau
       const collisionPlateau = new GroundCollision(terrainHeight);
 
       const aircraftPlateau = new MockAircraft(CESSNA_CONFIG);

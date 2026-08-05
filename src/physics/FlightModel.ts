@@ -4,6 +4,13 @@ import { Controls } from '../input/Controls';
 
 const GRAVITY = 9.81;
 const AIR_DENSITY = 1.225;
+/** Time constant (s) of the first-order roll-rate response (aileron + aerodynamic roll damping). */
+const ROLL_TIME_CONSTANT = 0.06;
+
+// Body axes used for control-surface rotations (post-multiplication uses the body frame).
+const LOCAL_FORWARD = new THREE.Vector3(1, 0, 0);
+const LOCAL_UP = new THREE.Vector3(0, 1, 0);
+const LOCAL_RIGHT = new THREE.Vector3(0, 0, 1);
 
 /**
  * Flight physics model with proper local-space rotation and forces.
@@ -15,8 +22,14 @@ const AIR_DENSITY = 1.225;
  *
  * Rotation convention (Euler 'YXZ'):
  *  - rotation.y = heading (yaw)
- *  - rotation.x = pitch (nose up/down)
- *  - rotation.z = roll/bank (wing tilt)
+ *  - rotation.x = bank/roll (wing tilt) — rotation around +X axis
+ *  - rotation.z = pitch (nose up/down) — rotation around +Z axis
+ *
+ * Note: With YXZ order, R = Ry·Rx·Rz. The innermost Rz rotates +X toward +Y (pitch),
+ * while Rx leaves +X unchanged and tilts +Y toward +Z (roll). The Euler form is a
+ * display convenience only — `rotation.x` folds at ±90° bank, so attitude readouts must
+ * use `Aircraft.getBankAngle()` / `getPitchAngle()`. Control rotations always run on the
+ * quaternion about the constant body axes.
  *
  * Controls:
  *  - S = pitchUp → positive pitch rate → nose rotates up (around +Z axis)
@@ -51,13 +64,23 @@ export class FlightModel {
   private _qYaw = new THREE.Quaternion();
   private _qCombined = new THREE.Quaternion();
 
-  update(aircraft: Aircraft, controls: Controls, dt: number) {
+  /** Current roll rate in rad/s; lags the commanded rate (aerodynamic roll damping). */
+  private _rollRate = 0;
+
+  /**
+   * @param onGround Ground contact state owned by `GroundCollision` (its `taxiMode` from the
+   *   previous frame, since FlightModel runs first). While on ground the roll axis is locked —
+   *   GroundCollision turns A/D into nosewheel steering. Falls back to a coarse altitude test.
+   */
+  update(aircraft: Aircraft, controls: Controls, dt: number, onGround?: boolean) {
     if (aircraft.crashed) return;
 
     // --- Update local axes from aircraft rotation ---
-    this._forward.set(1, 0, 0).applyEuler(aircraft.rotation);
-    this._up.set(0, 1, 0).applyEuler(aircraft.rotation);
-    this._right.set(0, 0, 1).applyEuler(aircraft.rotation);
+    // Read from the authoritative quaternion (PHY-06); these are world-space directions
+    // used by the aerodynamics below, not the axes of the control rotations.
+    this._forward.set(1, 0, 0).applyQuaternion(aircraft.quaternion);
+    this._up.set(0, 1, 0).applyQuaternion(aircraft.quaternion);
+    this._right.set(0, 0, 1).applyQuaternion(aircraft.quaternion);
 
     const speed = aircraft.velocity.length();
     const cfg = aircraft.config;
@@ -68,8 +91,16 @@ export class FlightModel {
     if (controls.throttleDown) aircraft.throttle = Math.max(0, aircraft.throttle - throttleRate * 0.5);
 
     // --- Forces ---
-    // Thrust: along forward axis
-    this._thrust.copy(this._forward).multiplyScalar(cfg.maxThrust * aircraft.throttle);
+    // Thrust: along forward axis.
+    // Propeller aircraft deliver roughly constant power, not constant thrust: full static
+    // thrust up to propThrustRefSpeed, then T = maxThrust * (refSpeed / airspeed).
+    // Jets keep constant thrust (propThrustRefSpeed undefined).
+    let thrustMagnitude = cfg.maxThrust * aircraft.throttle;
+    const propRefSpeed = cfg.propThrustRefSpeed;
+    if (propRefSpeed !== undefined && speed > propRefSpeed) {
+      thrustMagnitude *= propRefSpeed / speed;
+    }
+    this._thrust.copy(this._forward).multiplyScalar(thrustMagnitude);
     // Weight: always down
     this._weight.set(0, -cfg.mass * GRAVITY, 0);
 
@@ -86,14 +117,20 @@ export class FlightModel {
     }
 
     // --- Lift ---
+    // PHY-09: Lineare Auftriebskurve mit realistischem Anstieg (~5.7 /rad)
+    // statt sin(2*aoa) das bei 45° peakt (weit über dem Stallwinkel).
     const flapsBonus = aircraft.flapsDeployed ? 1.35 : 1.0;
     const clMax = cfg.liftCoefficient * flapsBonus;
-    const stallAngle = cfg.stallSpeed < 40 ? 0.30 : 0.26;
+    const clAlpha = 5.7; // Auftriebsanstieg in /rad (typisch für Tragflügelprofile)
 
-    // Lift coefficient: linear near 0 AoA, smooth peak at stall, then drop
-    let cl = clMax * Math.sin(2 * aoa);
-    if (Math.abs(aoa) > stallAngle) {
-      const excess = Math.abs(aoa) - stallAngle;
+    // Linearer Bereich: cl = clAlpha * aoa, geclamped bei clMax
+    let cl = clAlpha * aoa;
+    if (Math.abs(cl) > clMax) {
+      cl = clMax * Math.sign(cl);
+    }
+    // Nach Stallwinkel: weicher Abfall
+    if (Math.abs(aoa) > cfg.stallAngleRad) {
+      const excess = Math.abs(aoa) - cfg.stallAngleRad;
       cl *= Math.max(0.3, 1.0 - excess * 2.5);
     }
 
@@ -116,11 +153,12 @@ export class FlightModel {
 
     // --- Drag ---
     const cd = cfg.dragCoefficient;
-    const aspectRatio = cfg.wingArea > 0 ? Math.sqrt(cfg.wingArea) * 3 : 1;
+    // Aspect ratio is an independent geometry property (b²/S)
+    const aspectRatio = cfg.aspectRatio;
     const cdInduced = (cl * cl) / (Math.PI * aspectRatio * 0.8);
     const cdTotal = cd + cdInduced;
 
-    const stallDrag = Math.abs(aoa) > stallAngle ? 1.0 + (Math.abs(aoa) - stallAngle) * 8 : 1.0;
+    const stallDrag = Math.abs(aoa) > cfg.stallAngleRad ? 1.0 + (Math.abs(aoa) - cfg.stallAngleRad) * 8 : 1.0;
     const dragForce = q * cdTotal * cfg.wingArea * stallDrag;
 
     if (speed > 0.1) {
@@ -144,8 +182,9 @@ export class FlightModel {
     let controlFactor = (speed - cfg.stallSpeed * 0.3) / (cruiseSpeed - cfg.stallSpeed * 0.3);
     controlFactor = Math.max(0.25, Math.min(1.0, controlFactor));
 
-    if (Math.abs(aoa) > stallAngle) {
-      const excess = Math.abs(aoa) - stallAngle;
+    // Ruderwirksamkeit reduziert sich im Stall
+    if (Math.abs(aoa) > cfg.stallAngleRad) {
+      const excess = Math.abs(aoa) - cfg.stallAngleRad;
       controlFactor *= Math.max(0.3, 1.0 - excess * 1.5);
     }
 
@@ -154,21 +193,42 @@ export class FlightModel {
     const rollInput = (controls.rollLeft ? -1 : 0) + (controls.rollRight ? 1 : 0);
     const yawInput = (controls.yawLeft ? -1 : 0) + (controls.yawRight ? 1 : 0);
 
+    // PHY-11: On ground, only allow yaw input (for taxi steering), not roll
+    // GroundCollision handles yaw steering; FlightModel should not roll the aircraft on ground
+    const isOnGround = onGround ?? aircraft.position.y <= 1.0;
+    const effectiveRollInput = isOnGround ? 0 : rollInput;
+
     // Angular rates (rad/s)
     const deg2rad = Math.PI / 180;
     const pitchRate = pitchInput * cfg.pitchRate * deg2rad * controlFactor;
-    const rollRate = rollInput * cfg.rollRate * deg2rad * controlFactor;
     const yawRate = yawInput * cfg.yawRate * deg2rad * controlFactor;
 
-    // Apply rotations in LOCAL space (post-multiply = local frame)
-    this._qRoll.setFromAxisAngle(this._forward, rollRate * dt);
-    this._qPitch.setFromAxisAngle(this._right, pitchRate * dt);
-    this._qYaw.setFromAxisAngle(this._up, yawRate * dt);
+    // Roll: the aileron input is a roll-RATE command. Real aerodynamic roll damping acts on
+    // the roll rate, not on the bank angle, so it appears as a first-order lag toward the
+    // commanded rate. The aircraft therefore holds any bank angle and can roll through 360°.
+    // (A bank-angle spring would grow with speed and cancel the aileron command entirely.)
+    const commandedRollRate = effectiveRollInput * cfg.rollRate * deg2rad * controlFactor;
+    if (isOnGround) {
+      this._rollRate = 0;
+    } else {
+      this._rollRate += (commandedRollRate - this._rollRate) * (1 - Math.exp(-dt / ROLL_TIME_CONSTANT));
+    }
+    const rollRate = this._rollRate;
+
+    // Apply rotations in LOCAL space. `quaternion.multiply(dq)` (post-multiply) already
+    // interprets the axis of `dq` in the body frame, so the axes must be the constant body
+    // axes — feeding world-space axes here rotates about a doubly-transformed axis and turns
+    // roll input into pitch/yaw as soon as the aircraft leaves level flight.
+    this._qRoll.setFromAxisAngle(LOCAL_FORWARD, rollRate * dt);
+    this._qPitch.setFromAxisAngle(LOCAL_RIGHT, pitchRate * dt);
+    this._qYaw.setFromAxisAngle(LOCAL_UP, yawRate * dt);
 
     // Order: yaw → pitch → roll (rightmost applied first with post-multiply)
     this._qCombined.copy(this._qRoll).multiply(this._qPitch).multiply(this._qYaw);
-    aircraft.group.quaternion.multiply(this._qCombined);
-    aircraft.rotation.setFromQuaternion(aircraft.group.quaternion, 'YXZ');
+    // Write to authoritative quaternion (PHY-06: no longer writes to group.quaternion)
+    aircraft.quaternion.multiply(this._qCombined);
+    // Sync Euler for HUD/display (single conversion per frame)
+    aircraft.rotation.setFromQuaternion(aircraft.quaternion, 'YXZ');
 
     // --- Aerodynamic alignment: velocity follows the nose ---
     // When the aircraft is banked, lift has a horizontal component that
@@ -181,8 +241,9 @@ export class FlightModel {
       this._lateralVel.sub(this._tempVec2.copy(this._forward).multiplyScalar(forwardSpeed));
 
       // Damp lateral velocity — this creates the turning effect
-      // Stronger at higher speed (more aerodynamic force)
-      const dampFactor = Math.max(0, 1 - Math.min(2.0, 0.3 + speed * 0.005) * dt);
+      // Exponential damping for frame-rate independence: factor = exp(-k·dt)
+      const k = Math.min(2.0, 0.3 + speed * 0.005);
+      const dampFactor = Math.exp(-k * dt);
       this._lateralVel.multiplyScalar(dampFactor);
 
       // Reconstruct velocity: forward + lateral
@@ -211,5 +272,6 @@ export class FlightModel {
     this._acceleration.set(0, 0, 0);
     this._velocityDir.set(0, 0, 0);
     this._liftDir.set(0, 0, 0);
+    this._rollRate = 0;
   }
 }

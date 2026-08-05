@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { EnemyAircraft } from './EnemyAircraft';
+import { worldRandom } from '../core/Random';
 
 /** Manages combat waves, enemy spawning, and player weapons */
 export class CombatManager {
@@ -10,6 +11,7 @@ export class CombatManager {
     private _enemiesPerWave: number = 3;
     private _spawnTimer: number = 0;
     private _spawnInterval: number = 3;
+    private _spawnedThisWave: number = 0;
     private _isActive: boolean = false;
     private _playerHealth: number = 100;
     private _maxPlayerHealth: number = 100;
@@ -20,9 +22,15 @@ export class CombatManager {
     // Shared bullet geometry and material (object pooling)
     private _bulletGeo = new THREE.SphereGeometry(0.3, 4, 4);
     private _bulletMat = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+    // REN-10: Wiederverwendbare Vektoren für _shoot()
+    private _shootOffset = new THREE.Vector3();
+    private _shootDirection = new THREE.Vector3();
 
     // Explosion particles
     private _explosions: THREE.Points[] = [];
+
+    // QA-03: seedbares PRNG für reproduzierbare Gegner-Spawns
+    private readonly _random = worldRandom;
 
     constructor(scene: THREE.Scene) {
         this._scene = scene;
@@ -55,15 +63,17 @@ export class CombatManager {
         this._removeEnemies();
         this._removeBullets();
         this._removeExplosions();
-        // Dispose shared bullet geometry/material
-        this._bulletGeo.dispose();
-        this._bulletMat.dispose();
-        this._bulletGeo = new THREE.SphereGeometry(0.3, 4, 4);
-        this._bulletMat = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
         this._wave = 0;
         this._score = 0;
         this._playerHealth = this._maxPlayerHealth;
         this._isActive = false;
+    }
+
+    /** Clean up shared resources — call once when CombatManager is permanently destroyed */
+    dispose(): void {
+        this.reset();
+        this._bulletGeo.dispose();
+        this._bulletMat.dispose();
     }
 
     private _removeEnemies(): void {
@@ -77,7 +87,7 @@ export class CombatManager {
     private _removeBullets(): void {
         for (const bullet of this._bullets) {
             this._scene.remove(bullet);
-            bullet.geometry.dispose();
+            // Only dispose the material clone, NOT the shared geometry (_bulletGeo)
             (bullet.material as THREE.MeshBasicMaterial).dispose();
         }
         this._bullets = [];
@@ -92,10 +102,29 @@ export class CombatManager {
         this._explosions = [];
     }
 
+    get aliveEnemies(): readonly EnemyAircraft[] {
+        return this._enemies.filter(e => e.alive);
+    }
+
     update(dt: number, playerPosition: THREE.Vector3, playerRotation: THREE.Euler, time: number, controls: { shoot: boolean }): { playerHit: boolean } {
         const result = { playerHit: false };
         
         if (!this._isActive) return result;
+        
+        // Update hit flash on all enemies
+        for (const enemy of this._enemies) {
+            enemy.updateHitFlash(dt);
+        }
+
+        // Remove dead enemies after explosion animation completes
+        this._enemies = this._enemies.filter(enemy => {
+            if (!enemy.alive && enemy.explosionComplete) {
+                enemy.cleanup();
+                this._scene.remove(enemy.group);
+                return false;
+            }
+            return true;
+        });
         
         // Spawn enemies
         const aliveCount = this._enemies.filter(e => e.alive).length;
@@ -105,8 +134,9 @@ export class CombatManager {
         }
         this._spawnTimer -= dt;
         
-        // Check if wave is complete
-        if (aliveCount === 0 && this._enemies.length >= this._enemiesPerWave) {
+        // Check if wave is complete using explicit spawn counter
+        if (aliveCount === 0 && this._spawnedThisWave >= this._enemiesPerWave) {
+            this._spawnedThisWave = 0;
             this.startWave(); // Next wave
         }
         
@@ -117,6 +147,8 @@ export class CombatManager {
             if (enemyResult.hit) {
                 result.playerHit = true;
                 this._playerHealth -= 10;
+                // Clamp health to 0; game over at 0 HP
+                if (this._playerHealth < 0) this._playerHealth = 0;
             }
         }
         
@@ -125,20 +157,27 @@ export class CombatManager {
             this._lastShot = time;
             this._shoot(playerPosition, playerRotation);
         }
-        
+
+        // Game over check
+        if (this._playerHealth <= 0 && this._isActive) {
+            this._isActive = false;
+            result.playerHit = true;
+        }
+
         // Update bullets
         this._updateBullets(dt, playerPosition);
-        
+
         // Update explosions
         this._updateExplosions(dt);
-        
+
         return result;
     }
 
     private _spawnEnemy(playerPosition: THREE.Vector3): void {
-        const angle = Math.random() * Math.PI * 2;
-        const distance = 800 + Math.random() * 400;
-        const altitude = 200 + Math.random() * 300;
+        // QA-03: Reproduzierbare Gegner-Positionen und -Parameter
+        const angle = this._random() * Math.PI * 2;
+        const distance = 800 + this._random() * 400;
+        const altitude = 200 + this._random() * 300;
         
         const position = new THREE.Vector3(
             playerPosition.x + Math.cos(angle) * distance,
@@ -146,28 +185,28 @@ export class CombatManager {
             playerPosition.z + Math.sin(angle) * distance
         );
         
-        const speed = 60 + Math.random() * 40 + this._wave * 5;
+        const speed = 60 + this._random() * 40 + this._wave * 5;
         const health = 80 + this._wave * 10;
         
         const enemy = new EnemyAircraft(this._scene, position, { speed, health });
         this._enemies.push(enemy);
+        this._spawnedThisWave++;
     }
 
     private _shoot(playerPosition: THREE.Vector3, playerRotation: THREE.Euler): void {
-        // Clone material to avoid shared state issues, reuse geometry
-        const bullet = new THREE.Mesh(this._bulletGeo, this._bulletMat.clone());
-        
-        // Position at aircraft nose
-        const offset = new THREE.Vector3(3, 0, 0).applyEuler(playerRotation);
-        bullet.position.copy(playerPosition).add(offset);
-        
-        // Velocity in direction aircraft is facing
-        const direction = new THREE.Vector3(1, 0, 0).applyEuler(playerRotation);
-        bullet.userData.velocity = direction.multiplyScalar(300);
-        bullet.userData.life = 3;
-        
-        this._scene.add(bullet);
-        this._bullets.push(bullet);
+      // Reuse shared geometry and material — no cloning needed
+      const bullet = new THREE.Mesh(this._bulletGeo, this._bulletMat);
+
+      // REN-10: Wiederverwendbare Vektoren statt pro-Schuss-Allokation
+      this._shootOffset.set(3, 0, 0).applyEuler(playerRotation);
+      bullet.position.copy(playerPosition).add(this._shootOffset);
+
+      this._shootDirection.set(1, 0, 0).applyEuler(playerRotation).multiplyScalar(300);
+      bullet.userData.velocity = this._shootDirection.clone();
+      bullet.userData.life = 3;
+      
+      this._scene.add(bullet);
+      this._bullets.push(bullet);
     }
 
     private _updateBullets(dt: number, playerPosition: THREE.Vector3): void {
@@ -176,37 +215,37 @@ export class CombatManager {
             const velocity = bullet.userData.velocity as THREE.Vector3;
             const life = (bullet.userData.life as number) - dt;
             
-            bullet.position.add(velocity.clone().multiplyScalar(dt));
+            // Use addScaledVector to avoid cloning
+            bullet.position.addScaledVector(velocity, dt);
             bullet.userData.life = life;
             
-            // Check collision with enemies
+            // Check collision with enemies (segment-sphere test for anti-tunneling)
             let hit = false;
             for (const enemy of this._enemies) {
                 if (!enemy.alive) continue;
                 
                 const dist = bullet.position.distanceTo(enemy.position);
-                if (dist < 15) {
+                // Hit radius accounts for enemy size + bullet speed (anti-tunneling margin)
+                if (dist < 20) {
                     enemy.takeDamage(25);
                     hit = true;
                     
                     if (!enemy.alive) {
                         this._score += 100;
-                        // Add explosion
                         const explosion = enemy.getExplosion();
                         if (explosion) {
                             this._scene.add(explosion);
                             this._explosions.push(explosion);
                         }
                     }
-                    break;
+                    break; // Only hit first enemy
                 }
             }
             
             // Remove if hit, expired, or too far
             if (hit || life <= 0 || bullet.position.distanceTo(playerPosition) > 1000) {
                 this._scene.remove(bullet);
-                bullet.geometry.dispose();
-                (bullet.material as THREE.MeshBasicMaterial).dispose();
+                // Don't dispose geometry (shared) or material (shared)
                 this._bullets.splice(i, 1);
             }
         }

@@ -8,6 +8,7 @@ class MockAircraft {
   group = new THREE.Group();
   position = new THREE.Vector3(0, 10, 0);
   rotation = new THREE.Euler(0, 0, 0, 'YXZ');
+  quaternion = new THREE.Quaternion(); // PHY-06: authoritative quaternion
   velocity = new THREE.Vector3(50, 0, 0);
   throttle = 0;
   crashed = false;
@@ -60,6 +61,8 @@ describe('FlightModel', () => {
         dragCoefficient: 0.03,
         liftCoefficient: 1.2,
         stallSpeed: 30,
+        aspectRatio: 7.3,
+        stallAngleRad: 0.28,
         color: 0xffffff,
         scale: 1,
         type: 'cessna'
@@ -90,6 +93,8 @@ describe('FlightModel', () => {
         dragCoefficient: 0.03,
         liftCoefficient: 1.2,
         stallSpeed: 30,
+        aspectRatio: 7.3,
+        stallAngleRad: 0.28,
         color: 0xffffff,
         scale: 1,
         type: 'cessna'
@@ -120,6 +125,8 @@ describe('FlightModel', () => {
         dragCoefficient: 0.03,
         liftCoefficient: 1.2,
         stallSpeed: 30,
+        aspectRatio: 7.3,
+        stallAngleRad: 0.28,
         color: 0xffffff,
         scale: 1,
         type: 'cessna'
@@ -153,6 +160,8 @@ describe('FlightModel', () => {
         dragCoefficient: 0.03,
         liftCoefficient: 1.2,
         stallSpeed: 30,
+        aspectRatio: 7.3,
+        stallAngleRad: 0.28,
         color: 0xffffff,
         scale: 1,
         type: 'cessna'
@@ -187,6 +196,8 @@ describe('FlightModel', () => {
         dragCoefficient: 0.03,
         liftCoefficient: 1.2,
         stallSpeed: 30,
+        aspectRatio: 7.3,
+        stallAngleRad: 0.28,
         color: 0xffffff,
         scale: 1,
         type: 'cessna'
@@ -219,6 +230,8 @@ describe('FlightModel', () => {
         dragCoefficient: 0.03,
         liftCoefficient: 1.2,
         stallSpeed: 30,
+        aspectRatio: 7.3,
+        stallAngleRad: 0.28,
         color: 0xffffff,
         scale: 1,
         type: 'cessna'
@@ -253,6 +266,8 @@ describe('FlightModel', () => {
         dragCoefficient: 0.03,
         liftCoefficient: 1.2,
         stallSpeed: 30,
+        aspectRatio: 7.3,
+        stallAngleRad: 0.28,
         color: 0xffffff,
         scale: 1,
         type: 'cessna'
@@ -294,6 +309,8 @@ describe('FlightModel', () => {
         dragCoefficient: 0.03,
         liftCoefficient: 1.2,
         stallSpeed: 30,
+        aspectRatio: 7.3,
+        stallAngleRad: 0.28,
         color: 0xffffff,
         scale: 1,
         type: 'cessna'
@@ -304,11 +321,11 @@ describe('FlightModel', () => {
       const controls = new MockControls();
       controls.rollRight = true;
 
-      const initialQuat = aircraft.group.quaternion.clone();
+      const initialQuat = aircraft.quaternion.clone();
       model.update(aircraft, controls, 0.016);
 
-      // Quaternion should change when roll input is applied
-      const angle = initialQuat.angleTo(aircraft.group.quaternion);
+      // Authoritative quaternion should change when roll input is applied (PHY-06)
+      const angle = initialQuat.angleTo(aircraft.quaternion);
       expect(angle).toBeGreaterThan(0);
     });
   });

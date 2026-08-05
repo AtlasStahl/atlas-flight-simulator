@@ -22,6 +22,7 @@ export class GroundCollision {
   // Cached objects for hot path
   private _yawAxis = new THREE.Vector3(0, 1, 0);
   private _taxiQuat = new THREE.Quaternion();
+  /** Body right axis — post-multiplication interprets the axis in the body frame. */
   private _rightAxis = new THREE.Vector3(0, 0, 1);
   private _crashQuat = new THREE.Quaternion();
 
@@ -69,10 +70,19 @@ export class GroundCollision {
 
         // Ground drag - rolling resistance only (doesn't prevent acceleration)
         if (speed > 0.05) {
-          if (aircraft.throttle < 0.05) {
-            const brakeDecel = 0.5 * GRAVITY * dt;
+          if (controls.brakes) {
+            // Strong brake deceleration when B is pressed
+            const brakeDecel = 0.8 * GRAVITY * dt;
             if (speed > brakeDecel) {
               aircraft.velocity.multiplyScalar((speed - brakeDecel) / speed);
+            } else {
+              aircraft.velocity.set(0, 0, 0);
+            }
+          } else if (aircraft.throttle < 0.05) {
+            // Light rolling resistance at idle
+            const idleDecel = 0.15 * GRAVITY * dt;
+            if (speed > idleDecel) {
+              aircraft.velocity.multiplyScalar((speed - idleDecel) / speed);
             } else {
               aircraft.velocity.set(0, 0, 0);
             }
@@ -86,18 +96,18 @@ export class GroundCollision {
         }
 
         // Taxi steering: A/D yaw the aircraft on the ground
-        // Does NOT affect roll or pitch — FlightModel handles those
+        // Writes to authoritative quaternion (PHY-06), not group.quaternion directly
         if (speed > 1) {
           const turnRate = 1.5 * dt;
           if (controls.rollLeft) {
             this._taxiQuat.setFromAxisAngle(this._yawAxis, turnRate);
-            aircraft.group.quaternion.multiply(this._taxiQuat);
-            aircraft.rotation.setFromQuaternion(aircraft.group.quaternion, 'YXZ');
+            aircraft.quaternion.multiply(this._taxiQuat);
+            aircraft.rotation.setFromQuaternion(aircraft.quaternion, 'YXZ');
           }
           if (controls.rollRight) {
             this._taxiQuat.setFromAxisAngle(this._yawAxis, -turnRate);
-            aircraft.group.quaternion.multiply(this._taxiQuat);
-            aircraft.rotation.setFromQuaternion(aircraft.group.quaternion, 'YXZ');
+            aircraft.quaternion.multiply(this._taxiQuat);
+            aircraft.rotation.setFromQuaternion(aircraft.quaternion, 'YXZ');
           }
         }
 
@@ -119,15 +129,16 @@ export class GroundCollision {
     aircraft.position.y = terrainH + 0.3 * aircraft.config.scale;
   }
 
-  updateCrashAnimation(aircraft: Aircraft, dt: number) {
-    if (!aircraft.crashed) return;
+  updateCrashAnimation(aircraft: Aircraft, dt: number): boolean {
+    if (!aircraft.crashed) return false;
     this._crashTimer -= dt;
     if (this._crashTimer > 0) {
-      this._rightAxis.set(0, 0, 1).applyEuler(aircraft.rotation);
       this._crashQuat.setFromAxisAngle(this._rightAxis, dt * 0.5);
-      aircraft.group.quaternion.multiply(this._crashQuat);
-      aircraft.rotation.setFromQuaternion(aircraft.group.quaternion, 'YXZ');
+      aircraft.quaternion.multiply(this._crashQuat);
+      aircraft.rotation.setFromQuaternion(aircraft.quaternion, 'YXZ');
+      return false; // Still animating
     }
+    return true; // Crash animation complete
   }
 
   reset() {
@@ -135,4 +146,7 @@ export class GroundCollision {
     this._crashTimer = 0;
     this._gracePeriod = 3;
   }
+
+  /** Crash is complete; aircraft can be reset for a new flight (PHY-12) */
+  get crashComplete(): boolean { return this._crashTimer <= 0; }
 }

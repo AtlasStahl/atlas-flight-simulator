@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { AIRPORT_HALF_X, AIRPORT_HALF_Z } from './AirportLayout';
+import { worldRandom } from '../core/Random';
 
 // ============================================================
 //  Realistic Trees – detailed procedural vegetation
@@ -34,18 +36,23 @@ export class RealisticTrees {
   // Height callback from terrain
   private _getHeight: (x: number, z: number) => number;
 
-  // Airport exclusion zone bounds
+  // Airport exclusion zone bounds — PHY-15: aus AirportLayout.ts
   private _airportHalfX: number;
   private _airportHalfZ: number;
 
+  // QA-03: seedbares PRNG für reproduzierbare Weltgenerierung
+  private _random: () => number;
+
   constructor(
     getHeight: (x: number, z: number) => number,
-    airportHalfX: number = 1000,
-    airportHalfZ: number = 200
+    airportHalfX: number = AIRPORT_HALF_X,
+    airportHalfZ: number = AIRPORT_HALF_Z,
+    random: () => number = worldRandom
   ) {
     this._getHeight = getHeight;
     this._airportHalfX = airportHalfX;
     this._airportHalfZ = airportHalfZ;
+    this._random = random;
   }
 
   /**
@@ -92,8 +99,8 @@ export class RealisticTrees {
     let idx = 0;
 
     for (let i = 0; i < maxCount * 3 && idx < maxCount; i++) {
-      const x = (Math.random() - 0.5) * terrainSize;
-      const z = (Math.random() - 0.5) * terrainSize;
+      const x = (this._random() - 0.5) * terrainSize;
+      const z = (this._random() - 0.5) * terrainSize;
 
       if (this._inAirportZone(x, z, 200)) continue;
 
@@ -108,8 +115,8 @@ export class RealisticTrees {
       const slope = Math.abs(hLeft - hRight) + Math.abs(hFront - hBack);
       if (slope > 2) continue; // Skip steep terrain
 
-      const scale = 1.5 + Math.random() * 1.2; // Increased from 0.7-1.3 to 1.5-2.7 for better visibility
-      const rotation = Math.random() * Math.PI * 2;
+      const scale = 1.5 + this._random() * 1.2; // Increased from 0.7-1.3 to 1.5-2.7 for better visibility
+      const rotation = this._random() * Math.PI * 2;
 
       // Trunk positioned at terrain surface (base of trunk at y=h)
       // Cylinder center is at half height, so y = h + (5.5/2)*scale = h + 2.75*scale
@@ -202,8 +209,8 @@ export class RealisticTrees {
     ];
 
     for (let i = 0; i < maxCount * 2 && idx < maxCount; i++) {
-      const x = (Math.random() - 0.5) * terrainSize;
-      const z = (Math.random() - 0.5) * terrainSize;
+      const x = (this._random() - 0.5) * terrainSize;
+      const z = (this._random() - 0.5) * terrainSize;
 
       if (this._inAirportZone(x, z, 180)) continue;
 
@@ -218,16 +225,16 @@ export class RealisticTrees {
       const slope = Math.abs(hLeft - hRight) + Math.abs(hFront - hBack);
       if (slope > 2) continue;
 
-      const scale = 1.5 + Math.random() * 1.2; // Increased from 0.7-1.3 to 1.5-2.7 for better visibility
-      const rotation = Math.random() * Math.PI * 2;
+      const scale = 1.5 + this._random() * 1.2; // Increased from 0.7-1.3 to 1.5-2.7 for better visibility
+      const rotation = this._random() * Math.PI * 2;
 
       // Trunk with slight lean - base at terrain surface
       dummy.position.set(x, h + 2.5 * scale, z);
       dummy.scale.set(scale, scale, scale);
       dummy.rotation.set(
-        (Math.random() - 0.5) * 0.1, // Slight forward/back lean
+        (this._random() - 0.5) * 0.1, // Slight forward/back lean
         rotation,
-        (Math.random() - 0.5) * 0.1  // Slight side lean
+        (this._random() - 0.5) * 0.1  // Slight side lean
       );
       dummy.updateMatrix();
       trunkMesh.setMatrixAt(idx, dummy.matrix);
@@ -236,7 +243,7 @@ export class RealisticTrees {
       const canopyBaseY = h + 5 * scale;
       for (let s = 0; s < spheresPerTree; s++) {
         const cfg = sphereConfigs[s];
-        const sphereScale = scale * cfg.s * (0.85 + Math.random() * 0.3);
+        const sphereScale = scale * cfg.s * (0.85 + this._random() * 0.3);
 
         dummy.position.set(
           x + cfg.ox * scale,
@@ -296,8 +303,8 @@ export class RealisticTrees {
     let idx = 0;
 
     for (let i = 0; i < maxCount * 2 && idx < maxCount; i++) {
-      const x = (Math.random() - 0.5) * terrainSize;
-      const z = (Math.random() - 0.5) * terrainSize;
+      const x = (this._random() - 0.5) * terrainSize;
+      const z = (this._random() - 0.5) * terrainSize;
 
       if (this._inAirportZone(x, z, 150)) continue;
 
@@ -312,7 +319,7 @@ export class RealisticTrees {
       const slope = Math.abs(hLeft - hRight) + Math.abs(hFront - hBack);
       if (slope > 1.5) continue;
 
-      const scale = 1.2 + Math.random() * 1.5; // Increased from 0.5-1.3 to 1.2-2.7 for better visibility
+      const scale = 1.2 + this._random() * 1.5; // Increased from 0.5-1.3 to 1.2-2.7 for better visibility
 
       // Main bush sphere
       dummy.position.set(x, h + 0.7 * scale, z);
@@ -376,8 +383,8 @@ export class RealisticTrees {
     let idx = 0;
 
     for (let i = 0; i < maxCount * 3 && idx < maxCount; i++) {
-      const x = (Math.random() - 0.5) * terrainSize;
-      const z = (Math.random() - 0.5) * terrainSize;
+      const x = (this._random() - 0.5) * terrainSize;
+      const z = (this._random() - 0.5) * terrainSize;
 
       if (this._inAirportZone(x, z, 120)) continue;
 
@@ -385,11 +392,11 @@ export class RealisticTrees {
       // Only on very flat low terrain (0.5-8m)
       if (h < 0.5 || h > 8) continue;
 
-      const size = 8 + Math.random() * 18;
+      const size = 8 + this._random() * 18;
 
       dummy.position.set(x, h + 0.15, z);
       dummy.scale.set(size, size, size);
-      dummy.rotation.set(-Math.PI / 2, Math.random() * Math.PI, 0);
+      dummy.rotation.set(-Math.PI / 2, this._random() * Math.PI, 0);
       dummy.updateMatrix();
       patches.setMatrixAt(idx, dummy.matrix);
 

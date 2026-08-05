@@ -44,11 +44,21 @@ export class Atmosphere {
         scene.add(this._sky);
     }
 
+    private _tempColor = new THREE.Color();
+    private _tempColor2 = new THREE.Color();
+    // REN-10: Statische Farbkonsanten — nur einmal erzeugt
+    private readonly _sunsetHorizon = new THREE.Color(0xffaa00);
+    private readonly _dayHorizon = new THREE.Color(0x87ceeb);
+    private readonly _sunsetTop = new THREE.Color(0xff6600);
+    private readonly _dayTop = new THREE.Color(0x0077ff);
+    private readonly _sunsetBottom = new THREE.Color(0xffcc88);
+    private readonly _dayBottom = new THREE.Color(0xffffff);
+
     updateSunPosition(sun: THREE.Vector3): void {
         const h = Math.max(0, Math.min(1, sun.y / 1000));
-        this._fog.color.copy(new THREE.Color().lerpColors(new THREE.Color(0xffaa00), new THREE.Color(0x87ceeb), h));
-        this._skyMaterial.uniforms.topColor.value.copy(new THREE.Color().lerpColors(new THREE.Color(0xff6600), new THREE.Color(0x0077ff), h));
-        this._skyMaterial.uniforms.bottomColor.value.copy(new THREE.Color().lerpColors(new THREE.Color(0xffcc88), new THREE.Color(0xffffff), h));
+        this._fog.color.copy(this._tempColor.lerpColors(this._sunsetHorizon, this._dayHorizon, h));
+        this._skyMaterial.uniforms.topColor.value.copy(this._tempColor2.lerpColors(this._sunsetTop, this._dayTop, h));
+        this._skyMaterial.uniforms.bottomColor.value.copy(this._tempColor.lerpColors(this._sunsetBottom, this._dayBottom, h));
     }
 
     updateSkyPosition(camPos: THREE.Vector3): void { this._sky.position.copy(camPos); }

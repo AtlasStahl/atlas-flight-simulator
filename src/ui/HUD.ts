@@ -1,3 +1,6 @@
+import type { GameState } from '../core/GameState';
+import { mpsToKmh } from './units';
+
 /** Cockpit-style HUD with realistic analog instruments per aircraft type */
 export class HUD {
   private _canvas: HTMLCanvasElement;
@@ -20,6 +23,16 @@ export class HUD {
   private _needleSpeed = 0;
   private _needleAlt = 0;
   private _needleHeading = 0;
+
+  /** Shortest angle delta in (-π, π] — prevents heading interpolation from wrapping the long way */
+  private _angleDelta(from: number, to: number): number {
+    return Math.atan2(Math.sin(to - from), Math.cos(to - from));
+  }
+
+  /** Frame-rate independent smoothing; tau = time constant in seconds */
+  private _smooth(current: number, target: number, tau: number, dt: number): number {
+    return target + (current - target) * Math.exp(-dt / tau);
+  }
 
   // Instrument positions
   private _airspeedPos = { x: 0, y: 0 };
@@ -167,12 +180,14 @@ export class HUD {
     // Reset transform before re-scaling
     this._ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
+    // UI-07: Grundmaß aus der kleineren Fensterseite ableiten
     const w = window.innerWidth;
     const h = window.innerHeight;
+    const u = Math.min(w, h) * 0.06; // Skaliert mit der kleineren Seite
 
-    // Classic cockpit layout - moved higher to avoid blocking aircraft view at start
-    const panelY = h - 180;
-    const spacing = Math.min(w * 0.2, 240);
+    // Klassisches Cockpit-Layout — skaliert mit 'u'
+    const panelY = h - u * 3; // Instrumentenreihe
+    const spacing = Math.min(w * 0.2, u * 4);
     const centerX = w / 2;
 
     this._attitudePos.x = centerX;
@@ -186,46 +201,41 @@ export class HUD {
 
     // Heading indicator above attitude
     this._headingPos.x = centerX;
-    this._headingPos.y = panelY - 130;
+    this._headingPos.y = panelY - u * 2.2;
   }
 
-  private lerp(current: number, target: number, factor: number): number {
-    return current + (target - current) * factor;
-  }
-
-  update(
-    speed: number,
-    altitude: number,
-    heading: number,
-    throttle: number,
-    verticalSpeed: number,
-    pitch: number,
-    roll: number,
-    onGround: boolean,
-    crashed: boolean,
-    missionStatus?: { totalRings: number; ringsPassed: number; score: number; timeElapsed: number; completed: boolean },
-    _cameraMode?: string,
-    combatStatus?: { wave: number; score: number; playerHealth: number; maxPlayerHealth: number; enemiesAlive: number; totalEnemies: number }
-  ) {
+  /** UI-01: GameState-Objekt statt 12 Positionsparametern */
+  update(dt: number, state: GameState) {
+    const {
+      speed, altitude, heading, throttle, verticalSpeed,
+      pitch, roll, onGround, crashed,
+      missionStatus, combatStatus
+    } = state;
     if (!this._visible) return;
 
     // Apply aircraft-specific theme
     this.applyAircraftTheme();
 
-    // Smooth raw values first
-    this._smoothSpeed = this.lerp(this._smoothSpeed, speed, 0.1);
-    this._smoothAltitude = this.lerp(this._smoothAltitude, altitude, 0.1);
-    this._smoothHeading = this.lerp(this._smoothHeading, heading, 0.1);
-    this._smoothThrottle = this.lerp(this._smoothThrottle, throttle, 0.1);
-    this._smoothVerticalSpeed = this.lerp(this._smoothVerticalSpeed, verticalSpeed, 0.1);
-    this._smoothPitch = this.lerp(this._smoothPitch, pitch, 0.15);
-    this._smoothRoll = this.lerp(this._smoothRoll, roll, 0.15);
+    // Smooth raw values — frame-rate independent using exponential smoothing
+    // tau = 0.5s gives ~63% response in 0.5s regardless of frame rate
+    const tauValue = 0.5;
+    this._smoothSpeed = this._smooth(this._smoothSpeed, speed, tauValue, dt);
+    this._smoothAltitude = this._smooth(this._smoothAltitude, altitude, tauValue, dt);
+    this._smoothHeading = this._smoothHeading + this._angleDelta(this._smoothHeading, heading) * (1 - Math.exp(-dt / tauValue));
+    this._smoothThrottle = this._smooth(this._smoothThrottle, throttle, tauValue, dt);
+    this._smoothVerticalSpeed = this._smooth(this._smoothVerticalSpeed, verticalSpeed, tauValue, dt);
+    // Attitude needs a short time constant — a 0.5 s lag makes the horizon useless during
+    // aerobatics. Roll wraps at ±π, so it must be smoothed via the shortest angle delta,
+    // otherwise a roll through 180° sweeps the horizon backwards through the whole range.
+    const tauAttitude = 0.08;
+    this._smoothPitch = this._smooth(this._smoothPitch, pitch, tauAttitude, dt);
+    this._smoothRoll = this._smoothRoll + this._angleDelta(this._smoothRoll, roll) * (1 - Math.exp(-dt / tauAttitude));
 
     // Smooth needle positions (realistic inertia - slower than value smoothing)
-    const needleSmooth = this._aircraftType === 'boeing' ? 0.04 : 0.06;
-    this._needleSpeed = this.lerp(this._needleSpeed, this._smoothSpeed * 3.6, needleSmooth);
-    this._needleAlt = this.lerp(this._needleAlt, Math.max(0, this._smoothAltitude), needleSmooth);
-    this._needleHeading = this.lerp(this._needleHeading, this._smoothHeading, needleSmooth);
+    const tauNeedle = this._aircraftType === 'boeing' ? 1.5 : 1.0;
+    this._needleSpeed = this._smooth(this._needleSpeed, mpsToKmh(this._smoothSpeed), tauNeedle, dt);
+    this._needleAlt = this._smooth(this._needleAlt, Math.max(0, this._smoothAltitude), tauNeedle, dt);
+    this._needleHeading = this._needleHeading + this._angleDelta(this._needleHeading, this._smoothHeading) * (1 - Math.exp(-dt / tauNeedle));
 
     const w = window.innerWidth;
     const h = window.innerHeight;
@@ -586,26 +596,20 @@ export class HUD {
     ctx.arc(x, y, r - 2, 0, Math.PI * 2);
     ctx.clip();
 
-    // Apply roll rotation
+    // Apply roll rotation — UI-03: Horizont rotiert gegenläufig zum Flugzeug
     ctx.translate(x, y);
-    ctx.rotate(roll);
+    ctx.rotate(-roll);
 
     // Pitch offset
     const pitchScale = r * 0.6;
     const pitchOffset = pitch * pitchScale;
 
-    // Sky gradient
-    const skyGrad = ctx.createLinearGradient(0, -r, 0, pitchOffset);
-    skyGrad.addColorStop(0, '#1a4488');
-    skyGrad.addColorStop(1, '#2266aa');
-    ctx.fillStyle = skyGrad;
+    // Sky (feste Farbe statt Gradient — Allokation pro Frame vermeiden)
+    ctx.fillStyle = '#1a4488';
     ctx.fillRect(-r, -r + pitchOffset, r * 2, r);
 
-    // Ground gradient
-    const groundGrad = ctx.createLinearGradient(0, pitchOffset, 0, r);
-    groundGrad.addColorStop(0, '#553311');
-    groundGrad.addColorStop(1, '#664422');
-    ctx.fillStyle = groundGrad;
+    // Ground (feste Farbe statt Gradient)
+    ctx.fillStyle = '#553311';
     ctx.fillRect(-r, pitchOffset, r * 2, r);
 
     // Horizon line

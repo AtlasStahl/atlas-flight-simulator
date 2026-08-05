@@ -1,7 +1,7 @@
 {
   "name": "@atlas/flight-simulator",
   "private": true,
-  "version": "0.6.0",
+  "version": "0.7.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,18 +10,20 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "lint": "eslint src --ext .ts",
+    "lint": "eslint .",
     "format": "prettier --write src/**/*.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/three": "^0.185.1",
+    "@vitest/coverage-v8": "^4.1.10",
     "eslint": "^10.8.0",
     "eslint-config-prettier": "^10.1.8",
     "globals": "^17.8.0",
     "jsdom": "^29.1.1",
     "prettier": "^3.9.6",
     "typescript": "~6.0.2",
+    "typescript-eslint": "^8.65.0",
     "vite": "^8.2.0",
     "vitest": "^4.1.10"
   },

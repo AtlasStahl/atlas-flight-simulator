@@ -22,25 +22,37 @@ export class Controls {
   private _boundKeyDown: (e: KeyboardEvent) => void;
   private _boundKeyUp: (e: KeyboardEvent) => void;
 
+  private _boundBlur: () => void;
+  private _boundVisibility: () => void;
+  private _enabled: boolean = true;
+
   constructor() {
     this._boundKeyDown = (e) => this.onKeyDown(e);
     this._boundKeyUp = (e) => this.onKeyUp(e);
+    this._boundBlur = () => this.reset();
+    this._boundVisibility = () => {
+      if (document.hidden) this.reset();
+    };
     window.addEventListener('keydown', this._boundKeyDown);
     window.addEventListener('keyup', this._boundKeyUp);
+    window.addEventListener('blur', this._boundBlur);
+    document.addEventListener('visibilitychange', this._boundVisibility);
   }
 
   /** Remove event listeners to prevent memory leaks */
   dispose(): void {
     window.removeEventListener('keydown', this._boundKeyDown);
     window.removeEventListener('keyup', this._boundKeyUp);
+    window.removeEventListener('blur', this._boundBlur);
+    document.removeEventListener('visibilitychange', this._boundVisibility);
   }
 
   private onKeyDown(e: KeyboardEvent) {
     this.keys.add(e.code);
-    if (['KeyW', 'KeyS', 'KeyA', 'KeyD', 'KeyQ', 'KeyE', 'KeyR', 'KeyF', 'KeyG', 'KeyB',
-         'KeyV', 'KeyC', 'Space',
-         'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
-         'ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight'].includes(e.code)) {
+    // Only preventDefault for keys that are actually bound
+    if (['KeyW', 'KeyS', 'KeyA', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+         'KeyG', 'KeyB', 'KeyC', 'KeyV', 'Space',
+         'ShiftLeft', 'ShiftRight'].includes(e.code)) {
       e.preventDefault();
     }
   }
@@ -49,7 +61,14 @@ export class Controls {
     this.keys.delete(e.code);
   }
 
+  /** Enable or disable controls; disabling also resets all keys */
+  setEnabled(enabled: boolean): void {
+    this._enabled = enabled;
+    if (!enabled) this.reset();
+  }
+
   update() {
+    if (!this._enabled) return;
     // Pitch: S=Up (nose up), W=Down (nose down) - standard flight simulator
     this.pitchUp = this.keys.has('KeyS');
     this.pitchDown = this.keys.has('KeyW');

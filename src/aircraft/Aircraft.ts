@@ -6,6 +6,8 @@ export class Aircraft {
   config: AircraftConfig;
   position = new THREE.Vector3(0, 0, 0);
   velocity = new THREE.Vector3(0, 0, 0);
+  /** Authoritative rotation state — physics writes here, render syncs from here (PHY-06) */
+  quaternion = new THREE.Quaternion();
   rotation = new THREE.Euler(0, 0, 0, 'YXZ');
   throttle = 0;
   flapsDeployed = false;
@@ -15,6 +17,11 @@ export class Aircraft {
   private _propeller: THREE.Group | null = null;
   private _propAngle = 0;
 
+  // Reused axis vectors for attitude queries (hot path, called every frame)
+  private _axisUp = new THREE.Vector3();
+  private _axisRight = new THREE.Vector3();
+  private _axisForward = new THREE.Vector3();
+
   constructor(config: AircraftConfig) {
     this.config = config;
     this.buildModel();
@@ -22,6 +29,28 @@ export class Aircraft {
 
   get group(): THREE.Group {
     return this._group;
+  }
+
+  /** Sync Euler rotation from authoritative quaternion (called once per frame for HUD/display) */
+  syncRotation(): void {
+    this.rotation.setFromQuaternion(this.quaternion, 'YXZ');
+  }
+
+  /**
+   * Bank angle in radians, positive = right wing down, range (-PI, PI].
+   * Read from the quaternion because `rotation.x` is the middle axis of the YXZ Euler order
+   * and folds back at +/-90 deg, which corrupts the HUD during a full roll.
+   */
+  getBankAngle(): number {
+    this._axisUp.set(0, 1, 0).applyQuaternion(this.quaternion);
+    this._axisRight.set(0, 0, 1).applyQuaternion(this.quaternion);
+    return Math.atan2(-this._axisRight.y, this._axisUp.y);
+  }
+
+  /** Pitch angle in radians, positive = nose up, range [-PI/2, PI/2]. Gimbal-safe. */
+  getPitchAngle(): number {
+    this._axisForward.set(1, 0, 0).applyQuaternion(this.quaternion);
+    return Math.asin(Math.max(-1, Math.min(1, this._axisForward.y)));
   }
 
   private buildModel() {

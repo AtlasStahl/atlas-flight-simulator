@@ -8,7 +8,6 @@ export class RadarDisplay {
     private _range: number = 5000; // meters
     private _centerX: number = 0;
     private _centerY: number = 0;
-    private _size: number = 160;
 
     // Tracked objects
     private _targets: { pos: THREE.Vector3, type: 'enemy' | 'ally' | 'waypoint' }[] = [];
@@ -31,7 +30,6 @@ export class RadarDisplay {
         this._ctx = this._canvas.getContext('2d')!;
         this._centerX = this._canvas.width / 2;
         this._centerY = this._canvas.height / 2;
-        this._size = 160;
 
         document.body.appendChild(this._canvas);
     }
@@ -71,19 +69,20 @@ export class RadarDisplay {
         const ctx = this._ctx;
         const w = this._canvas.width;
         const h = this._canvas.height;
-        const r = this._size / 2;
+        const r = this._canvas.width / 2 - 10; // Radius from backing store, not CSS size
 
         // Clear
         ctx.clearRect(0, 0, w, h);
 
+        // UI-06: ABC-Palette statt reines Grün
         // Background
-        ctx.fillStyle = 'rgba(0, 20, 0, 0.7)';
+        ctx.fillStyle = 'rgba(20, 20, 60, 0.7)';
         ctx.beginPath();
         ctx.arc(this._centerX, this._centerY, r, 0, Math.PI * 2);
         ctx.fill();
 
         // Range rings
-        ctx.strokeStyle = 'rgba(0, 255, 0, 0.2)';
+        ctx.strokeStyle = 'rgba(56, 56, 255, 0.2)';
         ctx.lineWidth = 1;
         for (let i = 1; i <= 3; i++) {
             ctx.beginPath();
@@ -92,7 +91,7 @@ export class RadarDisplay {
         }
 
         // Cross-hair
-        ctx.strokeStyle = 'rgba(0, 255, 0, 0.3)';
+        ctx.strokeStyle = 'rgba(56, 56, 255, 0.3)';
         ctx.beginPath();
         ctx.moveTo(this._centerX, this._centerY - r);
         ctx.lineTo(this._centerX, this._centerY + r);
@@ -101,19 +100,19 @@ export class RadarDisplay {
         ctx.stroke();
 
         // North indicator
-        ctx.fillStyle = 'rgba(0, 255, 0, 0.8)';
+        ctx.fillStyle = 'rgba(56, 56, 255, 0.8)';
         ctx.font = 'bold 12px \'Helvetica Neue\', Arial, sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText('N', this._centerX, this._centerY - r + 14);
 
-        // Player (center)
-        ctx.fillStyle = '#00ff00';
+        // Player (center) — Atlas-Blau für eigene Signatur
+        ctx.fillStyle = '#3838FF';
         ctx.beginPath();
         ctx.arc(this._centerX, this._centerY, 3, 0, Math.PI * 2);
         ctx.fill();
 
         // Player heading indicator
-        ctx.strokeStyle = '#00ff00';
+        ctx.strokeStyle = '#3838FF';
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.moveTo(this._centerX, this._centerY);
@@ -180,7 +179,7 @@ export class RadarDisplay {
         }
 
         // Range label
-        ctx.fillStyle = 'rgba(0, 255, 0, 0.6)';
+        ctx.fillStyle = 'rgba(56, 56, 255, 0.6)';
         ctx.font = '10px \'Helvetica Neue\', Arial, sans-serif';
         ctx.textAlign = 'left';
         ctx.fillText(`${this._range}m`, this._centerX + 5, this._centerY + r - 5);

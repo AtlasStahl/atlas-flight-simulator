@@ -2,6 +2,41 @@ import * as THREE from 'three';
 import { RealisticTrees } from './RealisticTrees';
 import { AirportBuildings } from './AirportBuildings';
 import { AirportVehicles } from './AirportVehicles';
+import { worldRandom } from '../core/Random';
+import {
+  AIRPORT_HALF_X,
+  AIRPORT_HALF_Z,
+  AIRPORT_BLEND_WIDTH,
+  AIRPORT_COLOR_HALF_X,
+  AIRPORT_COLOR_HALF_Z,
+  APRON_X1,
+  APRON_X2,
+  APRON_Z1,
+  APRON_Z2,
+} from './AirportLayout';
+
+/**
+ * See: Becken im Höhenfeld, damit die Wasserfläche in einer Mulde liegt statt auf einem Hang.
+ * Der Wasserspiegel liegt unter der Mindesthöhe für Bewuchs (0.5 m), deshalb wächst nichts
+ * unter Wasser. Das Ufer liegt LAKE_BANK_HEIGHT über dem Spiegel, damit der See nicht ausläuft.
+ */
+const LAKE_X = 300;
+const LAKE_Z = -1400;
+/** Radius der gerenderten Wasserfläche */
+const LAKE_WATER_RADIUS = 250;
+/**
+ * Radius, bei dem das Beckenprofil den Wasserspiegel schneidet. Liegt bewusst deutlich
+ * weiter außen als die Wasserfläche — sonst liegt der Seegrund am Rand so dicht unter der
+ * Oberfläche, dass Wellentäler und Terrain-Dreiecke durch das Wasser stechen.
+ */
+const LAKE_SHORE_RADIUS = 310;
+/** Radius des Uferwalls */
+const LAKE_BASIN_RADIUS = 380;
+const LAKE_WATER_LEVEL = 0.4;
+const LAKE_DEPTH = 9;
+const LAKE_BANK_HEIGHT = 2.5;
+/** Breite des Übergangs vom Uferwall ins umgebende Terrain */
+const LAKE_BLEND_WIDTH = 160;
 
 // ============================================================
 //  Simplex Noise – compact 2D implementation
@@ -38,8 +73,8 @@ class SimplexNoise {
     const Y0 = j - t;
     const x0 = x - X0;
     const y0 = z - Y0;
-    let i1 = x0 > y0 ? 1 : 0;
-    let j1 = x0 > y0 ? 0 : 1;
+    const i1 = x0 > y0 ? 1 : 0;
+    const j1 = x0 > y0 ? 0 : 1;
     const x1 = x0 - i1 + G2;
     const y1 = y0 - j1 + G2;
     const x2 = x0 - 1 + 2 * G2;
@@ -83,17 +118,14 @@ class SimplexNoise {
 export class Terrain {
   private _waterGroup = new THREE.Group();
   private _noise = new SimplexNoise(42);
-  private _heightCache = new Map<string, number>();
-  private readonly _maxCacheSize = 10000; // LRU cache limit
 
   // Heightmap parameters
   private readonly _terrainSize = 4000;       // world units
   private readonly _segments = 200;
-  private readonly _airportX = 1600;
-  private readonly _airportZ = 100;
+  // PHY-15: _airportX/_airportZ entfernt — AirportLayout.ts ist die einzige Quelle
 
   constructor(scene: THREE.Scene) {
-    this.createSky(scene);
+    // createSky() removed — Atmosphere owns the sky sphere (REN-01 fix)
     this.createHeightmapTerrain(scene);
     this.createWater(scene);
     new AirportBuildings().createBuildings(scene);
@@ -106,27 +138,21 @@ export class Terrain {
   // ----------------------------------------------------------
   //  Heightmap helpers
   // ----------------------------------------------------------
-  /** Get terrain height at world (x, z) */
+  /** Get terrain height at world (x, z) — PHY-13: stetig, kein Caching, keine Allokation */
   getHeight(x: number, z: number): number {
-    const key = `${Math.round(x)},${Math.round(z)}`;
-    if (this._heightCache.has(key)) return this._heightCache.get(key)!;
-    const h = this._rawHeight(x, z);
-    // Evict oldest entry if cache is full (simple LRU approximation)
-    if (this._heightCache.size >= this._maxCacheSize) {
-      const firstKey = this._heightCache.keys().next().value;
-      if (firstKey !== undefined) {
-        this._heightCache.delete(firstKey);
-      }
+    // PHY-14: Außerhalb des Meshes (±_terrainSize/2) keine Höhe liefern — Ozeanebene 0
+    const half = this._terrainSize / 2;
+    if (x < -half || x > half || z < -half || z > half) {
+      return 0;
     }
-    this._heightCache.set(key, h);
-    return h;
+    return this._rawHeight(x, z);
   }
 
   private _rawHeight(x: number, z: number): number {
-    // Airport flat zone - larger and smoother
-    const airportHalfX = 1000;
-    const airportHalfZ = 200;
-    const blendWidth = 200;
+    // PHY-15: Zentrale Konstanten aus AirportLayout.ts
+    const airportHalfX = AIRPORT_HALF_X;
+    const airportHalfZ = AIRPORT_HALF_Z;
+    const blendWidth = AIRPORT_BLEND_WIDTH;
 
     const distX = Math.abs(x);
     const distZ = Math.abs(z);
@@ -156,12 +182,45 @@ export class Terrain {
 
     // Outside airport: full terrain
     if (blendFactor >= 1) {
-      return this._mountainHeight(x, z);
+      return this._lakeBasin(x, z, this._mountainHeight(x, z));
     }
 
     // Blend zone: mix between flat and terrain
     const terrainH = this._mountainHeight(x, z);
     return terrainH * blendFactor;
+  }
+
+  /** Senkt das Terrain im Seebereich zu einer Mulde ab; außerhalb unverändert. */
+  private _lakeBasin(x: number, z: number, height: number): number {
+    const dist = this._distanceToLake(x, z);
+    if (dist >= LAKE_BASIN_RADIUS + LAKE_BLEND_WIDTH) return height;
+
+    const rimHeight = LAKE_WATER_LEVEL + LAKE_BANK_HEIGHT;
+
+    if (dist < LAKE_SHORE_RADIUS) {
+      // Beckenboden: tiefste Stelle in der Mitte, an der Wasserlinie auf Spiegelhöhe
+      const bottom = LAKE_WATER_LEVEL - LAKE_DEPTH;
+      return bottom + (LAKE_WATER_LEVEL - bottom) * smoothstep(dist / LAKE_SHORE_RADIUS);
+    }
+    if (dist < LAKE_BASIN_RADIUS) {
+      // Ufer: von der Wasserlinie auf den Uferwall
+      const t = smoothstep((dist - LAKE_SHORE_RADIUS) / (LAKE_BASIN_RADIUS - LAKE_SHORE_RADIUS));
+      return LAKE_WATER_LEVEL + (rimHeight - LAKE_WATER_LEVEL) * t;
+    }
+    // Übergang vom Uferwall zurück auf das umgebende Terrain
+    const t = smoothstep((dist - LAKE_BASIN_RADIUS) / LAKE_BLEND_WIDTH);
+    return rimHeight * (1 - t) + height * t;
+  }
+
+  /** Position und Ausdehnung der Wasserfläche — Quelle für DynamicWater */
+  get lake(): { x: number; z: number; waterLevel: number; radius: number } {
+    return { x: LAKE_X, z: LAKE_Z, waterLevel: LAKE_WATER_LEVEL, radius: LAKE_WATER_RADIUS };
+  }
+
+  private _distanceToLake(x: number, z: number): number {
+    const dx = x - LAKE_X;
+    const dz = z - LAKE_Z;
+    return Math.sqrt(dx * dx + dz * dz);
   }
 
   private _mountainHeight(x: number, z: number): number {
@@ -198,10 +257,10 @@ export class Terrain {
     const colors = new Float32Array(pos.count * 3);
 
     for (let i = 0; i < pos.count; i++) {
-      // PlaneGeometry is already centered at origin (-half to +half)
-      // pos.getX(i) and pos.getY(i) are already world coordinates
+      // Das Mesh wird über rotation.x = -PI/2 gekippt: lokales +Y wird zu Welt -Z.
+      // Ohne die Negierung liegt das gerenderte Gelände gespiegelt zur Höhenabfrage.
       const vx = pos.getX(i);
-      const vz = pos.getY(i);
+      const vz = -pos.getY(i);
       const h = this._rawHeight(vx, vz);
       pos.setZ(i, h);
 
@@ -224,8 +283,9 @@ export class Terrain {
 
     const mesh = new THREE.Mesh(geo, mat);
     mesh.rotation.x = -Math.PI / 2;
+    // Terrain receives shadows but doesn't cast them (flat ground self-shadowing adds acne/cost)
     mesh.receiveShadow = true;
-    mesh.castShadow = true;
+    mesh.castShadow = false;
     scene.add(mesh);
   }
 
@@ -235,6 +295,13 @@ export class Terrain {
 
     // Color zones by height - more vibrant colors
     const c = new THREE.Color();
+
+    // Seegrund: dunkler Schlick statt Wiese, damit nichts Grünes durchs Wasser schimmert
+    if (h < LAKE_WATER_LEVEL && this._distanceToLake(x, z) < LAKE_SHORE_RADIUS) {
+      const depth = Math.min(1, (LAKE_WATER_LEVEL - h) / LAKE_DEPTH);
+      c.setRGB(0.16 - depth * 0.09, 0.20 - depth * 0.10, 0.19 - depth * 0.08);
+      return c;
+    }
 
     if (h < 2) {
       // Low-lying / wetland – dark green or sand
@@ -279,9 +346,15 @@ export class Terrain {
       c.setRGB(0.90 + detail, 0.90 + detail, 0.92);
     }
 
-    // Airport area – asphalt/concrete
-    if (Math.abs(x) < this._airportX && Math.abs(z) < this._airportZ) {
-      c.setRGB(0.28, 0.28, 0.26);
+    // Flughafengelände: gemähtes Grün wie auf einem echten Flugplatz; asphaltiert ist nur
+    // das Vorfeld. Bahn und Rollwege sind eigene Meshes und liegen darüber. (PHY-15)
+    if (Math.abs(x) < AIRPORT_COLOR_HALF_X && Math.abs(z) < AIRPORT_COLOR_HALF_Z) {
+      const onApron = x > APRON_X1 && x < APRON_X2 && z > APRON_Z1 && z < APRON_Z2;
+      if (onApron) {
+        c.setRGB(0.30, 0.30, 0.28);
+      } else {
+        c.setRGB(0.26 + detail, 0.44 + detail, 0.17);
+      }
     }
 
     return c;
@@ -303,8 +376,8 @@ export class Terrain {
   private createVegetation(scene: THREE.Scene): void {
     const trees = new RealisticTrees(
       this.getHeight.bind(this),
-      this._airportX,
-      this._airportZ
+      AIRPORT_HALF_X,
+      AIRPORT_HALF_Z
     );
     trees.createVegetation(scene, this._terrainSize);
   }
@@ -347,21 +420,22 @@ export class Terrain {
 
     villages.forEach(v => {
       for (let i = 0; i < v.count; i++) {
-        const hx = v.cx + (Math.random() - 0.5) * 100;
-        const hz = v.cz + (Math.random() - 0.5) * 100;
+        // QA-03: Reproduzierbare Dorf-Positionen und -Größen
+        const hx = v.cx + (worldRandom() - 0.5) * 100;
+        const hz = v.cz + (worldRandom() - 0.5) * 100;
         const h = this._rawHeight(hx, hz);
 
         const houseGroup = new THREE.Group();
         // Main body
         const body = new THREE.Mesh(
-          new THREE.BoxGeometry(6 + Math.random() * 4, 4 + Math.random() * 2, 5 + Math.random() * 3),
+          new THREE.BoxGeometry(6 + worldRandom() * 4, 4 + worldRandom() * 2, 5 + worldRandom() * 3),
           houseMat
         );
         body.position.y = body.geometry.parameters.height / 2;
         body.castShadow = true;
         houseGroup.add(body);
         // Roof (prism)
-        const roofH = 3 + Math.random();
+        const roofH = 3 + worldRandom();
         const roofW = body.geometry.parameters.width + 1;
         const roofD = body.geometry.parameters.depth + 1;
         const roofGeo = new THREE.ConeGeometry(Math.sqrt(roofW * roofW + roofD * roofD) / 2, roofH, 4);
@@ -402,50 +476,12 @@ export class Terrain {
     });
   }
 
-  // ----------------------------------------------------------
-  //  Sky
-  // ----------------------------------------------------------
-  private createSky(scene: THREE.Scene) {
-    const skyGeo = new THREE.SphereGeometry(8000, 32, 32);
-    const skyMat = new THREE.ShaderMaterial({
-      uniforms: {
-        topColor: { value: new THREE.Color(0x0077ff) },
-        bottomColor: { value: new THREE.Color(0xffffff) },
-        offset: { value: 20 },
-        exponent: { value: 0.6 },
-      },
-      vertexShader: `
-        varying vec3 vWorldPosition;
-        void main() {
-          vec4 worldPosition = modelMatrix * vec4(position, 1.0);
-          vWorldPosition = worldPosition.xyz;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: `
-        uniform vec3 topColor;
-        uniform vec3 bottomColor;
-        uniform float offset;
-        uniform float exponent;
-        varying vec3 vWorldPosition;
-        void main() {
-          float h = normalize(vWorldPosition + offset).y;
-          gl_FragColor = vec4(mix(bottomColor, topColor, max(pow(max(h, 0.0), exponent), 0.0)), 1.0);
-        }
-      `,
-      side: THREE.BackSide,
-    });
-    scene.add(new THREE.Mesh(skyGeo, skyMat));
-  }
+  // Sky removed — Atmosphere owns the sky sphere (REN-01 fix)
+  // private createSky(scene: THREE.Scene) { ... }
 
-  // ----------------------------------------------------------
-  //  Update
-  // ----------------------------------------------------------
+  // update() removed — _waterGroup is always empty (RES-06 fix)
   update(_dt: number) {
-    // Animate water (gentle wave)
-    this._waterGroup.children.forEach((w, i) => {
-      w.position.y += Math.sin(performance.now() * 0.001 + i) * 0.002;
-    });
+    // no-op
   }
 }
 

@@ -144,15 +144,17 @@ npm install       # Install/update dependencies only when needed
 npm run dev       # Start Vite development server
 npm run build     # TypeScript compile + Vite production build
 npm run preview   # Preview production bundle
+npm test          # Run Vitest test suite (8 files, 69+ tests)
+npm run lint      # Run ESLint with Flat Config
+npm run format    # Run Prettier
 ```
 
 Current limitations:
 
-- no automated test framework
-- no ESLint or Prettier command
+- Vitest test suite exists but covers only interfaces, not behavior (see QA-01 in FINDINGS.md)
 - no full TypeScript strict mode (`strict: true` is not configured)
-
-Do not claim that tests, linting, or strict mode exist when they do not.
+- no CI pipeline
+- no coverage gate
 
 ### Current Structure
 
@@ -160,15 +162,18 @@ Do not claim that tests, linting, or strict mode exist when they do not.
 src/
 ├── main.ts                  # Composition root and game loop
 ├── aircraft/                # Aircraft model, config, effects
+│   └── builder/             # AircraftBuilder interface (unused)
 ├── camera/                  # CameraManager and camera modes
 ├── combat/                  # Combat lifecycle and enemies
+├── core/                    # EventBus, GameState (unused in production)
 ├── environment/             # Terrain, runway, airport, water, vegetation
 ├── game/                    # Game-mode definitions
 ├── input/                   # Keyboard state and control mapping
 ├── missions/                # Ring mission and scoring
 ├── physics/                 # FlightModel and GroundCollision
-├── rendering/               # Atmosphere and post-processing
+├── rendering/               # Atmosphere, post-processing, LODManager (unused)
 ├── ui/                      # Menu, HUD, radar, reusable gauges
+│   └── gauge/               # Gauge components (unused in production)
 └── weather/                 # Weather visuals and flight effects
 ```
 
@@ -219,7 +224,9 @@ Treat these as compatibility contracts:
 - gravity: `-Y`
 - aircraft forward: local `+X`
 - Euler order: `'YXZ'`
-- current bank/roll angle: `rotation.z`
+- current bank/roll angle: `rotation.x` (rotation around +X axis)
+- pitch angle: `rotation.z` (rotation around +Z axis)
+- heading angle: `rotation.y` (rotation around +Y axis)
 - position: meters
 - velocity and configured speeds: meters per second
 - mass: kilograms
@@ -228,6 +235,12 @@ Treat these as compatibility contracts:
 - configured angular rates: degrees per second, converted before rotation
 - delta time: seconds; motion must never be frame-count-based
 - display units such as knots, km/h, feet, and ft/min: convert at UI boundaries
+
+**Important:** With YXZ order, R = Ry·Rx·Rz. The innermost Rz rotates +X toward +Y (pitch), while Rx leaves +X unchanged and tilts +Y toward +Z (roll). This has been verified numerically with Three.js Quaternion/Euler conversion.
+
+**Rotation application:** `aircraft.quaternion` is authoritative. Control rotations are applied with `quaternion.multiply(dq)` (post-multiplication), which interprets the axis of `dq` in the **body** frame. Therefore `dq` must be built from the constant body axes `(1,0,0)`, `(0,1,0)`, `(0,0,1)` — never from world-space axes obtained via `applyEuler`/`applyQuaternion`. Feeding a world-space axis into a post-multiplied delta applies the rotation twice-transformed and converts roll input into pitch and yaw as soon as the aircraft leaves level flight.
+
+**Attitude readout:** `rotation.x` is the middle angle of the YXZ order and folds at ±90° bank. Any bank/pitch value shown to the user or used in logic must come from `Aircraft.getBankAngle()` / `Aircraft.getPitchAngle()`, which read the quaternion directly.
 
 Before changing any sign, axis, rotation order, or unit:
 

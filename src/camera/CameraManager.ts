@@ -21,8 +21,13 @@ export class CameraManager {
     private _orbitRadius = 0;
     private _isOrbiting = false;
 
-    // Cockpit
-    private _cockpitOffset = new THREE.Vector3(0, 1.5, 0);
+    // Cockpit (CAM-02: skaliert mit Flugzeuggröße)
+    private _cockpitOffset = new THREE.Vector3(0.5, 0.8, 0);
+
+    /** CAM-02: Cockpit-Offset aus AircraftConfig setzen */
+    setCockpitOffset(offset: { x: number; y: number; z: number }): void {
+        this._cockpitOffset.set(offset.x, offset.y, offset.z);
+    }
 
     // Cinematic
     private _cinematicAngle = 0;
@@ -33,11 +38,12 @@ export class CameraManager {
     private _towerPosition = new THREE.Vector3(0, 80, -200);
     private _towerLookAt = new THREE.Vector3();
 
-    // Smooth transition
-    private _transitionSpeed = 3;
-    private _isTransitioning = false;
+    // Transition (CAM-04: eigenes Zielvektor statt self-reference)
     private _transitionStart = new THREE.Vector3();
+    private _transitionTarget = new THREE.Vector3();
     private _transitionProgress = 0;
+    private _isTransitioning = false;
+    private _transitionSpeed = 2.0;
 
     // Object pooling - reusable temp vectors
     private _tempOffset = new THREE.Vector3();
@@ -58,6 +64,8 @@ export class CameraManager {
         this._isTransitioning = true;
         this._transitionProgress = 0;
         this._transitionStart.copy(this._camera.position);
+        // CAM-04: Zielposition speichern für den Übergang
+        this._transitionTarget.copy(this._camera.position);
 
         switch (mode) {
             case CameraMode.CHASE:
@@ -91,9 +99,17 @@ export class CameraManager {
     }
 
     onMouseWheel(delta: number): void {
+        // Zoom works in Chase mode (adjusting chase distance) and orbit mode
         if (this._isOrbiting || this._mode === CameraMode.CHASE) {
             this._orbitRadius += delta * 0.05;
             this._orbitRadius = Math.max(5, Math.min(100, this._orbitRadius));
+            // Also adjust chase offset for non-orbit chase mode
+            if (this._mode === CameraMode.CHASE && !this._isOrbiting) {
+                const currentDist = this._chaseOffset.length();
+                const newDist = Math.max(5, Math.min(100, this._orbitRadius));
+                const scale = newDist / currentDist;
+                this._chaseOffset.multiplyScalar(scale);
+            }
         }
     }
 
@@ -124,8 +140,10 @@ export class CameraManager {
         }
 
         if (this._isTransitioning) {
+            // CAM-04: Zielposition nach dem Modus-Update speichern, dann interpolieren
+            this._transitionTarget.copy(this._camera.position);
             const t = this._smoothStep(this._transitionProgress);
-            this._camera.position.lerpVectors(this._transitionStart, this._camera.position, t);
+            this._camera.position.lerpVectors(this._transitionStart, this._transitionTarget, t);
         }
     }
 
@@ -160,8 +178,9 @@ export class CameraManager {
         this._tempOffset.applyEuler(aircraftRot);
         this._camera.position.copy(aircraftPos).add(this._tempOffset);
 
-        this._tempForward.set(1, 0, 0).applyEuler(aircraftRot);
-        this._lookAtTarget.copy(this._camera.position).add(this._tempForward.multiplyScalar(100));
+        // REN-10: _tempForward wiederverwenden, kein neues Objekt
+        this._tempForward.set(1, 0, 0).applyEuler(aircraftRot).multiplyScalar(100);
+        this._lookAtTarget.copy(this._camera.position).add(this._tempForward);
 
         this._camera.lookAt(this._lookAtTarget);
     }
@@ -185,7 +204,14 @@ export class CameraManager {
 
     private _updateTower(aircraftPos: THREE.Vector3, dt: number): void {
         this._camera.position.copy(this._towerPosition);
-        this._towerLookAt.lerp(aircraftPos, 2 * dt);
+        // CAM-03: Turmkamera hat Reichweitenbegrenzung (3000 m)
+        const dist = this._camera.position.distanceTo(aircraftPos);
+        if (dist > 3000) {
+            // Flugzeug außerhalb der Sichtweite — Kamera schaut geradeaus
+            this._towerLookAt.set(this._towerPosition.x + 500, this._towerPosition.y, this._towerPosition.z);
+        } else {
+            this._towerLookAt.lerp(aircraftPos, 2 * dt);
+        }
         this._camera.lookAt(this._towerLookAt);
     }
 

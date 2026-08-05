@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { RingObstacle } from './RingObstacle';
+import { worldRandom } from '../core/Random';
 
 export interface MissionStatus {
   totalRings: number;
@@ -14,6 +15,11 @@ export class MissionSystem {
   private _rings: RingObstacle[] = [];
   private _startTime: number = 0;
   private _score: number = 0;
+  // REN-10: Wiederverwendbares Status-Objekt statt pro-Frame-Allokation
+  private readonly _status: MissionStatus = { totalRings: 0, ringsPassed: 0, score: 0, timeElapsed: 0, completed: false };
+
+  /** QA-03: seedbares PRNG für reproduzierbare Missionen */
+  private readonly _random = worldRandom;
 
   constructor(_scene: THREE.Scene) {
     // Don't create rings yet - wait for ring_mission mode
@@ -37,7 +43,7 @@ export class MissionSystem {
     ];
 
     ringPositions.forEach((pos, i) => {
-      const radius = 15 + Math.random() * 10;
+      const radius = 15 + this._random() * 10;
       const rotationY = (i * Math.PI) / 4; // Varying orientations
       this._rings.push(new RingObstacle(scene, pos, radius, rotationY));
     });
@@ -56,16 +62,16 @@ export class MissionSystem {
 
     this._score = newScore;
 
-    const completed = ringsPassed === this._rings.length;
+    const completed = this._rings.length > 0 && ringsPassed === this._rings.length;
     const timeElapsed = (performance.now() - this._startTime) / 1000;
 
-    return {
-      totalRings: this._rings.length,
-      ringsPassed,
-      score: this._score,
-      timeElapsed,
-      completed
-    };
+    // REN-10: Wiederverwendbares Objekt statt pro-Frame-Allokation
+    this._status.totalRings = this._rings.length;
+    this._status.ringsPassed = ringsPassed;
+    this._status.score = this._score;
+    this._status.timeElapsed = timeElapsed;
+    this._status.completed = completed;
+    return this._status;
   }
 
   reset(scene: THREE.Scene) {

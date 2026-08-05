@@ -30,8 +30,8 @@ Wir glauben, dass Fliegen zu den schönsten Erfahrungen gehört, die ein Mensch 
 | 🛩️ **Cessna 172** | Der sanfte Lehrer | 371 km/h | 158 km/h | 120°/s |
 | ✈️ **Boeing 737** | Das Schwergewicht | 850 km/h | 281 km/h | 60°/s |
 | 🛫 **Extra 300** | Der Akrobat | 792 km/h | 100 km/h | 420°/s |
-| ⚡ **F-16 Fighting Falcon** | Der Jäger | 1260 km/h | 288 km/h | 300°/s |
-| 🔥 **Su-27 Flanker** | Der Russe | 1368 km/h | 306 km/h | 280°/s |
+| ⚡ **F-16 Fighting Falcon** | Der Jäger | 1260 km/h | 288 km/h | 360°/s |
+| 🔥 **Su-27 Flanker** | Der Russe | 1368 km/h | 306 km/h | 300°/s |
 
 Jedes Flugzeug hat seine eigene Persönlichkeit – die Cessna ist sanft und verzeihend, die Boeing ist kraftvoll und majestätisch, und die Extra ist ein Kunststück der Akrobatik.
 

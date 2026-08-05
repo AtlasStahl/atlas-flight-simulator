@@ -1,63 +1,96 @@
 import * as THREE from 'three';
 
+/**
+ * Animierte Wasserfläche mit Gerstner-Wellen.
+ *
+ * `PlaneGeometry` liegt in der lokalen **XY**-Ebene, die Flächennormale ist lokal **+Z**.
+ * Die Wellen werden deshalb über `position.xy` ausgewertet und die Höhenauslenkung auf
+ * `position.z` gelegt; erst das Mesh selbst wird über `rotation.x = -PI/2` waagerecht gedreht.
+ */
 export class DynamicWater {
     private _mesh: THREE.Mesh;
     private _time = 0;
 
-    constructor(scene: THREE.Scene, position: THREE.Vector3, size: number = 200) {
-        const geo = new THREE.PlaneGeometry(size, size, 64, 64);
+    /** @param radius Radius der sichtbaren (kreisrunden) Wasserfläche in Metern */
+    constructor(scene: THREE.Scene, position: THREE.Vector3, radius: number = 150) {
+        const geo = new THREE.PlaneGeometry(radius * 2, radius * 2, 96, 96);
         const mat = new THREE.ShaderMaterial({
             uniforms: {
                 time: { value: 0 },
-                waterColor: { value: new THREE.Color(0x1a6fa0) },
+                waterColor: { value: new THREE.Color(0x2a7fb0) },
+                deepColor: { value: new THREE.Color(0x0d3d5c) },
                 sunDirection: { value: new THREE.Vector3(0.5, 1, 0.3).normalize() },
-                uCameraPosition: { value: new THREE.Vector3() }
+                uCameraPosition: { value: new THREE.Vector3() },
+                uRadius: { value: radius }
             },
             vertexShader: `
                 uniform float time;
                 varying vec3 vWorldPosition, vNormal;
-                vec3 gerstnerWave(vec2 p, float steep, float waveLen, vec2 dir, float t) {
-                    float c = steep / waveLen;
+                varying vec2 vLocal;
+
+                // Gerstner-Welle in der lokalen XY-Ebene; z ist die Höhenauslenkung.
+                // steepness in [0,1]; die Amplitude folgt aus a = steepness / k.
+                vec3 gerstner(vec2 p, float wavelength, float steepness, vec2 dir, float t) {
+                    float k = 6.283185 / wavelength;
+                    float a = steepness / k;
                     vec2 d = normalize(dir);
-                    float w = c * dot(p, d) * waveLen - t * steep * 2.0;
-                    return vec3(d.x * sin(w) / c, steep * cos(w), d.y * sin(w) / c);
+                    float phase = k * dot(d, p) - sqrt(9.81 * k) * t;
+                    return vec3(d * (a * cos(phase)), a * sin(phase));
                 }
+
+                // Binnensee: flache Kräuselung. Größere Amplituden lassen die Wellentäler
+                // am Ufer unter den Seegrund tauchen und reißen Löcher in die Fläche.
+                vec3 waveOffset(vec2 p, float t) {
+                    return gerstner(p, 26.0, 0.035, vec2( 1.0,  0.4), t)
+                         + gerstner(p, 14.0, 0.025, vec2( 0.7, -1.0), t)
+                         + gerstner(p,  7.0, 0.015, vec2(-0.5,  0.9), t);
+                }
+
                 void main() {
-                    vec3 pos = gerstnerWave(position.xz, 0.04, 6.0, vec2(1.0, 0.5), time)
-                               + gerstnerWave(position.xz, 0.03, 4.0, vec2(0.8, 1.0), time * 1.3)
-                               + gerstnerWave(position.xz, 0.02, 2.0, vec2(-0.5, 0.8), time * 0.7);
-                    vec3 finalPos = position + pos;
-                    // Calculate analytical normal from wave derivatives
-                    float eps = 0.1;
-                    vec2 p1 = position.xz;
-                    vec3 wave1 = gerstnerWave(p1 + vec2(eps, 0), 0.04, 6.0, vec2(1.0, 0.5), time)
-                                + gerstnerWave(p1 + vec2(eps, 0), 0.03, 4.0, vec2(0.8, 1.0), time * 1.3)
-                                + gerstnerWave(p1 + vec2(eps, 0), 0.02, 2.0, vec2(-0.5, 0.8), time * 0.7);
-                    vec3 wave2 = gerstnerWave(p1 + vec2(0, eps), 0.04, 6.0, vec2(1.0, 0.5), time)
-                                + gerstnerWave(p1 + vec2(0, eps), 0.03, 4.0, vec2(0.8, 1.0), time * 1.3)
-                                + gerstnerWave(p1 + vec2(0, eps), 0.02, 2.0, vec2(-0.5, 0.8), time * 0.7);
-                    vec3 dx = (wave1 - pos) / eps;
-                    vec3 dz = (wave2 - pos) / eps;
-                    vNormal = normalize(vec3(dx.x, 1.0, dz.z));
-                    vec4 worldPos = modelMatrix * vec4(finalPos, 1.0);
+                    vec2 p = position.xy;
+                    vec3 displaced = position + waveOffset(p, time);
+
+                    // Normale aus den Tangenten der ausgelenkten Fläche
+                    float eps = 1.0;
+                    vec2 px = p + vec2(eps, 0.0);
+                    vec2 py = p + vec2(0.0, eps);
+                    vec3 tx = vec3(px, position.z) + waveOffset(px, time) - displaced;
+                    vec3 ty = vec3(py, position.z) + waveOffset(py, time) - displaced;
+                    vNormal = normalize(normalMatrix * normalize(cross(tx, ty)));
+
+                    vLocal = p;
+                    vec4 worldPos = modelMatrix * vec4(displaced, 1.0);
                     vWorldPosition = worldPos.xyz;
                     gl_Position = projectionMatrix * viewMatrix * worldPos;
                 }
             `,
             fragmentShader: `
                 uniform vec3 waterColor;
+                uniform vec3 deepColor;
                 uniform vec3 sunDirection;
                 uniform vec3 uCameraPosition;
+                uniform float uRadius;
                 varying vec3 vWorldPosition, vNormal;
+                varying vec2 vLocal;
+
                 void main() {
+                    // Runde Wasserfläche aus dem quadratischen Gitter schneiden
+                    float d = length(vLocal) / uRadius;
+                    if (d > 1.0) discard;
+
                     vec3 viewDir = normalize(uCameraPosition - vWorldPosition);
                     vec3 normal = normalize(vNormal);
+                    if (dot(normal, viewDir) < 0.0) normal = -normal;
+
                     float fresnel = pow(1.0 - max(dot(viewDir, normal), 0.0), 3.0);
                     fresnel = mix(0.04, 1.0, fresnel);
                     vec3 halfDir = normalize(sunDirection + viewDir);
-                    float spec = pow(max(dot(normal, halfDir), 0.0), 128.0);
-                    vec3 color = mix(waterColor, vec3(1.0), fresnel * 0.5) + spec * 0.5;
-                    gl_FragColor = vec4(color, 0.85);
+                    float spec = pow(max(dot(normal, halfDir), 0.0), 64.0);
+
+                    vec3 base = mix(deepColor, waterColor, max(dot(normal, sunDirection), 0.0));
+                    vec3 color = mix(base, vec3(0.62, 0.76, 0.88), fresnel * 0.35) + spec * 0.35;
+                    // Deckend bis kurz vor das Ufer, dort weiche Kante statt harter Schnittlinie
+                    gl_FragColor = vec4(color, smoothstep(1.0, 0.93, d));
                 }
             `,
             transparent: true, side: THREE.DoubleSide, depthWrite: false

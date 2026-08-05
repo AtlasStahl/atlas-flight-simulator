@@ -109,6 +109,8 @@ function shadow(obj: THREE.Object3D) {
 export class AirportBuildings {
   /** Track all building groups for disposal */
   private _groups: THREE.Group[] = [];
+  /** RES-04: Taxiway-Meshes in einer eigenen Gruppe */
+  private _taxiwayGroup: THREE.Group | null = null;
 
   createBuildings(scene: THREE.Scene) {
     this.createTerminal(scene);
@@ -135,6 +137,11 @@ export class AirportBuildings {
       });
     }
     this._groups = [];
+    // RES-04: Taxiway-Gruppe entfernen (geteilte Materialien nicht disposen)
+    if (this._taxiwayGroup) {
+      scene.remove(this._taxiwayGroup);
+      this._taxiwayGroup = null;
+    }
   }
 
   // ==========================================================
@@ -352,9 +359,10 @@ export class AirportBuildings {
   //  Hangars (2×)
   // ==========================================================
   private createHangars(scene: THREE.Scene) {
+    // Beide Hangars innerhalb der flachen Zone (|x| < AIRPORT_HALF_X), sonst stehen sie am Hang
     const positions = [
-      { x: 900, z: 100 },
-      { x: 1050, z: 100 },
+      { x: 890, z: 130 },
+      { x: 960, z: 130 },
     ];
 
     positions.forEach((pos) => {
@@ -437,6 +445,8 @@ export class AirportBuildings {
       group.add(stripeRight);
 
       group.position.set(pos.x, 0, pos.z);
+      // Tore zeigen zum Vorfeld (-Z), nicht ins Gelände
+      group.rotation.y = Math.PI;
       scene.add(group);
       this._groups.push(group);
     });
@@ -577,19 +587,23 @@ export class AirportBuildings {
   //  Taxiways (connect buildings to runway)
   // ==========================================================
   private createTaxiways(scene: THREE.Scene) {
-    // --- Main taxiway surfaces ---
+    // RES-04: Alle Taxiway-Meshes in einer Gruppe
+    const taxiwayGroup = new THREE.Group();
+    this._taxiwayGroup = taxiwayGroup;
+
+    // Rollwege verbinden Bahn, Vorfeld und Hangars
     const taxiways = [
-      // Runway to terminal
+      // Bahn zum Vorfeld
       { x: 750, z: 0, length: 100, width: 12, rot: 0 },
-      // Terminal to control tower
+      // Terminal zum Kontrollturm
       { x: 825, z: 25, length: 50, width: 8, rot: Math.PI / 2 },
-      // Terminal to hangars
-      { x: 875, z: 50, length: 100, width: 10, rot: Math.PI / 4 },
-      // Hangars parallel connector
-      { x: 975, z: 100, length: 200, width: 10, rot: 0 },
-      // Cargo area connector
+      // Vorfeld zu den Hangars
+      { x: 925, z: 110, length: 90, width: 10, rot: Math.PI / 2 },
+      // Vorfeldkante entlang der Hangars
+      { x: 890, z: 90, length: 180, width: 10, rot: 0 },
+      // Anbindung Frachtbereich
       { x: 875, z: -15, length: 150, width: 8, rot: -Math.PI / 6 },
-      // Fuel tanks access
+      // Zufahrt Tanklager
       { x: 750, z: -50, length: 100, width: 6, rot: Math.PI / 2 },
     ];
 
@@ -601,15 +615,15 @@ export class AirportBuildings {
       surface.rotation.x = -Math.PI / 2;
       surface.rotation.z = tw.rot;
       surface.position.set(tw.x, 0.02, tw.z);
-      scene.add(surface);
+      taxiwayGroup.add(surface);
     });
 
     // --- Taxiway center line markings (thin white planes) ---
     const markings = [
       { x: 750, z: 0, length: 100, rot: 0 },
       { x: 825, z: 25, length: 50, rot: Math.PI / 2 },
-      { x: 875, z: 50, length: 100, rot: Math.PI / 4 },
-      { x: 975, z: 100, length: 200, rot: 0 },
+      { x: 925, z: 110, length: 90, rot: Math.PI / 2 },
+      { x: 890, z: 90, length: 180, rot: 0 },
       { x: 875, z: -15, length: 150, rot: -Math.PI / 6 },
       { x: 750, z: -50, length: 100, rot: Math.PI / 2 },
     ];
@@ -639,7 +653,7 @@ export class AirportBuildings {
             mk.z + offset * sin,
           );
         }
-        scene.add(dash);
+        taxiwayGroup.add(dash);
       }
     });
 
@@ -666,7 +680,7 @@ export class AirportBuildings {
             mk.z + side * 5 * perpSin,
           );
         }
-        scene.add(edgeLine);
+        taxiwayGroup.add(edgeLine);
       }
     });
 
@@ -675,7 +689,9 @@ export class AirportBuildings {
       const bar = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 12), yellowMat);
       bar.rotation.x = -Math.PI / 2;
       bar.position.set(700, 0.03, z);
-      scene.add(bar);
+      taxiwayGroup.add(bar);
     }
+
+    scene.add(taxiwayGroup);
   }
 }

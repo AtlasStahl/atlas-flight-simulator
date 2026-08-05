@@ -4,9 +4,9 @@ export interface AircraftConfig {
   name: string;
   /** Maximum speed in m/s */
   maxSpeed: number;
-  /** Rotate/takeoff speed in m/s */
+  /** Rotate/takeoff speed in m/s — Anzeigewert für das Menü; NICHT physikwirksam. Tatsächliche Abhebegeschwindigkeit ergibt sich aus mass, wingArea, liftCoefficient und AoA. */
   rotateSpeed: number;
-  /** Maximum climb rate in m/s */
+  /** Maximum climb rate in m/s — Anzeigewert für das Menü; NICHT physikwirksam. Tatsächliche Steigrate ergibt sich aus Auftrieb und Widerstand. */
   maxClimbRate: number;
   /** Roll rate in degrees per second */
   rollRate: number;
@@ -16,8 +16,14 @@ export interface AircraftConfig {
   yawRate: number;
   /** Throttle response factor (0-1) */
   throttleResponse: number;
-  /** Maximum thrust in Newtons */
+  /** Maximum thrust in Newtons (static thrust for propeller aircraft) */
   maxThrust: number;
+  /**
+   * Airspeed in m/s up to which a propeller delivers full `maxThrust`. Above it the
+   * constant-power model applies: thrust = maxThrust * (propThrustRefSpeed / airspeed).
+   * Leave undefined for jets, which produce roughly speed-independent thrust.
+   */
+  propThrustRefSpeed?: number;
   /** Mass in kg */
   mass: number;
   /** Wing area in m² */
@@ -28,12 +34,18 @@ export interface AircraftConfig {
   liftCoefficient: number;
   /** Stall speed in m/s */
   stallSpeed: number;
+  /** Aspect ratio (b²/S) — independent geometry property, not derived from wingArea */
+  aspectRatio: number;
+  /** Stall angle in radians — airfoil property, not derived from stallSpeed */
+  stallAngleRad: number;
   /** Color for the aircraft model */
   color: number;
   /** Scale factor for the 3D model */
   scale: number;
   /** Aircraft type identifier */
   type: 'cessna' | 'boeing' | 'extra' | 'f16' | 'su27';
+  /** Cockpit camera offset (CAM-02: scales with aircraft size) */
+  cockpitOffset: { x: number; y: number; z: number };
 }
 
 export const AIRCRAFT_CONFIGS: Record<string, AircraftConfig> = {
@@ -46,15 +58,19 @@ export const AIRCRAFT_CONFIGS: Record<string, AircraftConfig> = {
     pitchRate: 60,
     yawRate: 30,
     throttleResponse: 0.4,
-    maxThrust: 1300,
+    maxThrust: 2600,       // statischer Propellerschub (~180 hp, Wirkungsgrad ~0.8)
+    propThrustRefSpeed: 41, // entspricht ~107 kW Vortriebsleistung
     mass: 1100,
     wingArea: 16.2,
     dragCoefficient: 0.03,
     liftCoefficient: 1.2,
     stallSpeed: 30,        // ~108 km/h
+    aspectRatio: 7.3,      // real Cessna 172 aspect ratio
+    stallAngleRad: 0.28,   // ~16° typical for GA airfoils
     color: 0xffffff,
     scale: 1.0,
-    type: 'cessna'
+    type: 'cessna',
+    cockpitOffset: { x: 0.5, y: 0.8, z: 0 } // CAM-02: Cessna Cockpit
   },
   boeing: {
     name: 'Boeing 737',
@@ -71,28 +87,35 @@ export const AIRCRAFT_CONFIGS: Record<string, AircraftConfig> = {
     dragCoefficient: 0.025,
     liftCoefficient: 1.4,
     stallSpeed: 55,       // ~198 km/h
+    aspectRatio: 9.4,      // real Boeing 737 aspect ratio
+    stallAngleRad: 0.24,   // ~14° commercial airliner
     color: 0xcccccc,
     scale: 2.5,
-    type: 'boeing'
+    type: 'boeing',
+    cockpitOffset: { x: 1.5, y: 1.8, z: 0 } // CAM-02: Boeing Cockpit (größeres Flugzeug)
   },
   extra: {
     name: 'Extra 300',
-    maxSpeed: 220,        // ~790 km/h
+    maxSpeed: 114,        // ~410 km/h (Vne der realen Extra 300)
     rotateSpeed: 28,      // ~100 km/h (aerobatic, very short takeoff)
-    maxClimbRate: 30,     // ~6000 ft/min
+    maxClimbRate: 16,     // ~3200 ft/min
     rollRate: 420,
     pitchRate: 180,
     yawRate: 100,
     throttleResponse: 0.9,
-    maxThrust: 8000,      // T/W ~1.16 — real Extra 300 can climb vertically
+    maxThrust: 6500,      // statischer Propellerschub (~300 hp) — T/W ~0.95
+    propThrustRefSpeed: 27.5, // entspricht ~179 kW Vortriebsleistung
     mass: 700,
     wingArea: 10.2,
     dragCoefficient: 0.02,
     liftCoefficient: 1.6,
     stallSpeed: 18,       // ~65 km/h (aerobatic stall speed, with power-on)
+    aspectRatio: 6.5,      // Extra 300 high-performance aerobatic
+    stallAngleRad: 0.35,   // ~20° aerobatic airfoil
     color: 0xff0000,
     scale: 0.8,
-    type: 'extra'
+    type: 'extra',
+    cockpitOffset: { x: 0.4, y: 0.6, z: 0 } // CAM-02: Extra 300 Cockpit (Kunstflug)
   },
   f16: {
     name: 'F-16 Fighting Falcon',
@@ -109,9 +132,12 @@ export const AIRCRAFT_CONFIGS: Record<string, AircraftConfig> = {
     dragCoefficient: 0.018,
     liftCoefficient: 1.6,
     stallSpeed: 40,       // ~144 km/h
+    aspectRatio: 3.5,      // F-16 delta wing, low aspect ratio
+    stallAngleRad: 0.22,   // ~12° fighter airfoil
     color: 0x556b2f,      // Military green
     scale: 1.2,
-    type: 'f16'
+    type: 'f16',
+    cockpitOffset: { x: 0.8, y: 1.0, z: 0 } // CAM-02: F-16 Cockpit (Bubble-Canopy)
   },
   su27: {
     name: 'Su-27 Flanker',
@@ -128,8 +154,11 @@ export const AIRCRAFT_CONFIGS: Record<string, AircraftConfig> = {
     dragCoefficient: 0.02,
     liftCoefficient: 1.5,
     stallSpeed: 45,       // ~162 km/h
+    aspectRatio: 3.8,      // Su-27 delta wing, low aspect ratio
+    stallAngleRad: 0.22,   // ~12° fighter airfoil
     color: 0x4a4a4a,      // Dark gray
     scale: 1.4,
-    type: 'su27'
+    type: 'su27',
+    cockpitOffset: { x: 1.0, y: 1.2, z: 0 } // CAM-02: Su-27 Cockpit (Flanker)
   }
 };

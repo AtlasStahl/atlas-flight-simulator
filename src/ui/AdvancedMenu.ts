@@ -23,6 +23,14 @@ export class AdvancedMenu {
         this._build();
     }
 
+    /** ARCH-05: Korrigiere Flugzeugauswahl, wenn aktueller Typ im neuen Modus nicht erlaubt ist */
+    private _correctAircraftForMode(mode: GameMode): void {
+        const allowed = GAME_MODES[mode].allowedAircraft;
+        if (!allowed.includes(this._selectedAircraft)) {
+            this._selectedAircraft = allowed[0];
+        }
+    }
+
     private _build() {
         this._container = document.createElement('div');
         this._container.style.cssText = `
@@ -35,11 +43,13 @@ export class AdvancedMenu {
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
+            justify-content: flex-start;
             z-index: 200;
             font-family: 'Helvetica Neue', Arial, sans-serif;
             color: #FFFFFF;
             overflow-y: auto;
+            padding: 40px 20px;
+            box-sizing: border-box;
         `;
 
         // Title
@@ -89,7 +99,7 @@ export class AdvancedMenu {
 
         // Start button
         this._startBtn = document.createElement('button');
-        this._startBtn.textContent = 'START FLIGHT';
+        this._startBtn.textContent = 'FLUG STARTEN';
         this._startBtn.style.cssText = `
             margin-top: 15px;
             padding: 12px 45px;
@@ -113,7 +123,7 @@ export class AdvancedMenu {
         this._startBtn!.addEventListener('click', () => {
             if (this._starting) return;
             this._starting = true;
-            this._startBtn!.textContent = '⏳ STARTING...';
+            this._startBtn!.textContent = '⏳ STARTET...';
             this._startBtn!.style.background = 'linear-gradient(180deg, #B2B2B2, #575756)';
             this._startBtn!.style.cursor = 'default';
             this._startBtn!.style.transform = 'scale(1)';
@@ -191,35 +201,77 @@ export class AdvancedMenu {
         const icons: Record<string, string> = { cessna: '🛩️', boeing: '✈️', extra: '🛫', f16: '⚡', su27: '🔥' };
         const typeLabels: Record<string, string> = { cessna: 'Propeller', boeing: 'Jet', extra: 'Kunstflug', f16: 'Jäger', su27: 'Jäger' };
 
+        // ARCH-05: Erlaubte Flugzeuge für aktuellen Modus
+        const allowed = GAME_MODES[this._selectedGameMode].allowedAircraft;
+
+        const cards: HTMLButtonElement[] = [];
+
         for (const type of types) {
             const config = AIRCRAFT_CONFIGS[type];
-            const card = document.createElement('div');
+            const card = document.createElement('button');
+            card.type = 'button';
+            // UI-05: ARIA radio group for keyboard accessibility
+            card.setAttribute('role', 'radio');
+            card.setAttribute('aria-checked', this._selectedAircraft === type ? 'true' : 'false');
+            card.setAttribute('aria-label', `${config.name} Flugzeug auswählen`);
+            card.setAttribute('tabindex', this._selectedAircraft === type ? '0' : '-1');
             const sel = this._selectedAircraft === type;
+            const isAllowed = allowed.includes(type);
+            // ARCH-05: Ausgrauen wenn nicht erlaubt
+            const opacity = isAllowed ? '1' : '0.35';
+            const cursor = isAllowed ? 'pointer' : 'not-allowed';
             card.style.cssText = `
                 padding: 10px 14px 8px 14px;
                 background: ${sel ? 'rgba(56,56,255,0.15)' : 'rgba(255,255,255,0.03)'};
                 border: 2px solid ${sel ? '#3838FF' : 'rgba(255,255,255,0.08)'};
                 border-radius: 6px;
-                cursor: pointer;
+                cursor: ${cursor};
                 text-align: center;
                 min-width: 110px;
                 transition: all 0.15s ease;
+                font-family: 'Helvetica Neue', Arial, sans-serif;
+                color: ${sel ? '#FFFFFF' : '#B2B2B2'};
+                outline: none;
+                opacity: ${opacity};
             `;
             card.innerHTML = `
                 <div style="font-size: 18px; margin-bottom: 2px;">${icons[type]}</div>
-                <div style="font-size: 11px; font-weight: 500; font-family: 'Helvetica Neue', Arial, sans-serif; color: ${sel ? '#FFFFFF' : '#B2B2B2'}; margin-top: 2px;">${config.name}</div>
-                <div style="font-size: 9px; color: #575756; margin-top: 3px; line-height: 1.5; font-family: 'Helvetica Neue', Arial, sans-serif;">
+                <div style="font-size: 11px; font-weight: 500; margin-top: 2px;">${config.name}</div>
+                <div style="font-size: 9px; color: #575756; margin-top: 3px; line-height: 1.5;">
                     ${typeLabels[type]}<br>
                     <span style="color: ${sel ? '#B2B2B2' : '#575756'};">${Math.round(config.maxSpeed*3.6)} km/h</span>
                     <span style="color: #575756;"> | Abheben: ${Math.round(config.rotateSpeed*3.6)} km/h</span>
                 </div>
             `;
             card.addEventListener('click', () => {
+                if (!isAllowed) return; // ARCH-05: Keine Auswahl wenn nicht erlaubt
                 this._selectedAircraft = type;
                 this._renderAircraftCards();
             });
+            // UI-05: keyboard navigation for radio group
+            card.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    this._selectedAircraft = type;
+                    this._renderAircraftCards();
+                }
+            });
+            cards.push(card);
             this._aircraftRow.appendChild(card);
         }
+
+        // Arrow key navigation across cards
+        cards.forEach((card, i) => {
+            card.addEventListener('keydown', (e) => {
+                if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    cards[(i + 1) % cards.length].focus();
+                } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    cards[(i - 1 + cards.length) % cards.length].focus();
+                }
+            });
+        });
     }
 
     private _renderModeButtons() {
@@ -247,7 +299,10 @@ export class AdvancedMenu {
             btn.innerHTML = `<div style="color: ${sel ? '#FFFFFF' : '#B2B2B2'}; font-weight: 500;">${mode.icon} ${mode.name}</div>`;
             btn.addEventListener('click', () => {
                 this._selectedGameMode = key as GameMode;
+                // ARCH-05: Korrigiere Flugzeug wenn im neuen Modus nicht erlaubt
+                this._correctAircraftForMode(key as GameMode);
                 this._renderModeButtons();
+                this._renderAircraftCards();
             });
             this._modeCol.appendChild(btn);
         }
@@ -290,9 +345,9 @@ export class AdvancedMenu {
 
     show() {
         this._container.style.display = 'flex';
-        this._starting = false; // Reset so START FLIGHT button works again
+        this._starting = false; // Reset so FLUG STARTEN button works again
         if (this._startBtn) {
-            this._startBtn.textContent = 'START FLIGHT';
+            this._startBtn.textContent = 'FLUG STARTEN';
             this._startBtn.style.background = 'linear-gradient(180deg, #3838FF, #2828CC)';
             this._startBtn.style.borderColor = '#5555FF';
             this._startBtn.style.cursor = 'pointer';

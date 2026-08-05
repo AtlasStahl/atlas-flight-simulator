@@ -176,8 +176,8 @@ export class AirportVehicles {
   // ============================================================
   private createPushbackTractors(scene: THREE.Scene) {
     const positions = [
-      { x: 80, z: 55, rotY: 0.3 },
-      { x: 100, z: 75, rotY: -0.2 },
+      { x: 745, z: 78, rotY: 0.3 },
+      { x: 862, z: 92, rotY: -0.2 },
     ];
 
     for (const pos of positions) {
@@ -303,7 +303,7 @@ export class AirportVehicles {
     // Wheels (6 – triple axle)
     this.addSixWheels(group, 0.45, 0.3, 2.2, 1.2, 0.45);
 
-    group.position.set(-380, 0, 130);
+    group.position.set(700, 0, 128);
     group.rotation.y = Math.PI / 2;
     scene.add(group);
   }
@@ -372,7 +372,7 @@ export class AirportVehicles {
     // Wheels (4)
     this.addWheels(group, 0.4, 0.3, 2.4, 3, 0.4);
 
-    group.position.set(180, 0, 170);
+    group.position.set(905, 0, 120);
     group.rotation.y = -0.5;
     scene.add(group);
   }
@@ -382,8 +382,8 @@ export class AirportVehicles {
   // ============================================================
   private createServiceVans(scene: THREE.Scene) {
     const positions = [
-      { x: 60, z: 55, rotY: 0.8 },
-      { x: 75, z: 75, rotY: -0.4 },
+      { x: 722, z: 96, rotY: 0.8 },
+      { x: 880, z: 70, rotY: -0.4 },
     ];
 
     for (const pos of positions) {
@@ -556,7 +556,7 @@ export class AirportVehicles {
     // Wheels (6 – triple axle for large bus)
     this.addSixWheels(group, 0.5, 0.35, 2.8, 2, 0.5);
 
-    group.position.set(50, 0, 60);
+    group.position.set(800, 0, 140);
     group.rotation.y = 0.2;
     scene.add(group);
   }
@@ -565,9 +565,10 @@ export class AirportVehicles {
   //  Jet Bridges (2x)
   // ============================================================
   private createJetBridges(scene: THREE.Scene) {
+    // Fluggastbrücken sitzen an der Terminalfront (z ~ 20) und reichen zum Standplatz
     const positions = [
-      { x: -30, z: 85, rotY: 0 },
-      { x: 30, z: 85, rotY: 0.3 },
+      { x: 762, z: 22, rotY: 0 },
+      { x: 838, z: 22, rotY: 0 },
     ];
 
     for (const pos of positions) {
@@ -660,11 +661,12 @@ export class AirportVehicles {
   //  Ground Signs (4x)
   // ============================================================
   private createGroundSigns(scene: THREE.Scene) {
+    // Gate-Schilder an den Standplätzen vor dem Terminal
     const positions = [
-      { x: -100, z: 60, rotY: 0, text: 'A' },
-      { x: -50, z: 60, rotY: 0, text: 'B' },
-      { x: 150, z: 60, rotY: Math.PI, text: 'C' },
-      { x: 250, z: 60, rotY: Math.PI, text: 'D' },
+      { x: 742, z: 48, rotY: 0, text: 'A' },
+      { x: 782, z: 48, rotY: 0, text: 'B' },
+      { x: 818, z: 48, rotY: 0, text: 'C' },
+      { x: 858, z: 48, rotY: 0, text: 'D' },
     ];
 
     for (const pos of positions) {
@@ -719,15 +721,16 @@ export class AirportVehicles {
   private createLightPoles(scene: THREE.Scene) {
     // Arrange around the airport perimeter - well outside runway bounds
     // Runway: x=-800..800, z=-30..30
+    // Flutlichtmasten rahmen das Vorfeld ein, statt entlang der Bahn verstreut zu stehen
     const positions = [
-      { x: -300, z: -60 },
-      { x: -150, z: -60 },
-      { x: 0, z: -60 },
-      { x: 150, z: -60 },
-      { x: -300, z: 90 },
-      { x: -150, z: 90 },
-      { x: 0, z: 90 },
-      { x: 150, z: 90 },
+      { x: 675, z: 35 },
+      { x: 675, z: 105 },
+      { x: 675, z: 158 },
+      { x: 800, z: 158 },
+      { x: 975, z: 35 },
+      { x: 975, z: 70 },
+      { x: 880, z: 35 },
+      { x: 745, z: 158 },
     ];
 
     for (const pos of positions) {
@@ -787,13 +790,14 @@ export class AirportVehicles {
   //  Barriers (6x)
   // ============================================================
   private createBarriers(scene: THREE.Scene) {
+    // Absperrungen begrenzen die Vorfeld-Servicestraße
     const positions = [
-      { x: -250, z: 60, rotY: 0 },
-      { x: -240, z: 60, rotY: 0 },
-      { x: -230, z: 60, rotY: 0 },
-      { x: 100, z: 80, rotY: Math.PI / 2 },
-      { x: 100, z: 90, rotY: Math.PI / 2 },
-      { x: 100, z: 100, rotY: Math.PI / 2 },
+      { x: 706, z: 152, rotY: 0 },
+      { x: 716, z: 152, rotY: 0 },
+      { x: 726, z: 152, rotY: 0 },
+      { x: 864, z: 152, rotY: 0 },
+      { x: 874, z: 152, rotY: 0 },
+      { x: 884, z: 152, rotY: 0 },
     ];
 
     for (const pos of positions) {
@@ -854,9 +858,9 @@ export class AirportVehicles {
   // ============================================================
   private createLuggageCarts(scene: THREE.Scene) {
     const positions = [
-      { x: 40, z: 80, rotY: 0.5 },
-      { x: 55, z: 85, rotY: 0.3 },
-      { x: 70, z: 75, rotY: -0.2 },
+      { x: 786, z: 100, rotY: 0.5 },
+      { x: 800, z: 106, rotY: 0.3 },
+      { x: 814, z: 96, rotY: -0.2 },
     ];
 
     for (const pos of positions) {
